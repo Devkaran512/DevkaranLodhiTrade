@@ -122,7 +122,8 @@ public class PositionMonitorService extends Service {
             if(code>=400)return;
             JSONObject j=new JSONObject(read(c.getInputStream()));
             String a=j.optString("action","WAIT");
-            double sc=j.optDouble("score",0);\n            int threshold=prefs.getInt("alert_threshold",85);
+            double sc=j.optDouble("score",0);
+            int threshold=prefs.getInt("alert_threshold",85);
             JSONObject in=j.optJSONObject("intelligence");
 
             long now=System.currentTimeMillis();
