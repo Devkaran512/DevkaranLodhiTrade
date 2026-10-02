@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: devkaranlodhitrade-api
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: BACKEND_API_KEY
+        generateValue: true
+      - key: MIN_SIGNAL_SCORE
+        value: "72"
+      - key: LOOKBACK_PERIOD
+        value: "5d"
+      - key: AUTO_REFRESH_SECONDS
+        value: "60"
+      - key: GLOBAL_SYMBOLS
+        value: "^GSPC,^IXIC,^DJI,^VIX,^N225,^HSI,GC=F,CL=F,DX-Y.NYB,INR=X"
