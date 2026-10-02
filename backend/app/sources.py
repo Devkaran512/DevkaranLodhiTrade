@@ -165,21 +165,33 @@ def option_snapshot():
         exp=exps[0]
         chain=t.option_chain(exp)
         calls=chain.calls; puts=chain.puts
+        call_oi=float(calls.openInterest.fillna(0).sum()); put_oi=float(puts.openInterest.fillna(0).sum())
+        call_chg=float(calls.get("change",pd.Series(dtype=float)).fillna(0).sum()) if "change" in calls else 0.0
+        put_chg=float(puts.get("change",pd.Series(dtype=float)).fillna(0).sum()) if "change" in puts else 0.0
+        call_iv=float(calls.get("impliedVolatility",pd.Series(dtype=float)).replace([float("inf"),-float("inf")],pd.NA).dropna().mean()) if "impliedVolatility" in calls else None
+        put_iv=float(puts.get("impliedVolatility",pd.Series(dtype=float)).replace([float("inf"),-float("inf")],pd.NA).dropna().mean()) if "impliedVolatility" in puts else None
+        # Max pain: strike with minimum total intrinsic payout from current OI.
+        strikes=sorted(set(calls.strike.dropna().tolist())|set(puts.strike.dropna().tolist()))
+        max_pain=None
+        if strikes:
+            best=[]
+            for k in strikes:
+                pain=float((((k-calls.strike).clip(lower=0))*calls.openInterest.fillna(0)).sum()+(((puts.strike-k).clip(lower=0))*puts.openInterest.fillna(0)).sum())
+                best.append((pain,k))
+            max_pain=min(best)[1]
         return {"available":True,"expiry":exp,
-                "call_oi":float(calls.openInterest.fillna(0).sum()),
-                "put_oi":float(puts.openInterest.fillna(0).sum()),
-                "call_volume":float(calls.volume.fillna(0).sum()),
-                "put_volume":float(puts.volume.fillna(0).sum())}
+                "call_oi":call_oi,"put_oi":put_oi,"call_volume":float(calls.volume.fillna(0).sum()),"put_volume":float(puts.volume.fillna(0).sum()),
+                "call_change_oi":call_chg,"put_change_oi":put_chg,"avg_call_iv":call_iv,"avg_put_iv":put_iv,"max_pain":max_pain}
     except Exception as e:
         return {"available":False,"reason":str(e)[:180]}
 
 def source_status():
     return {
         "public_market_data":"Yahoo Finance public web adapter (no login)",
-        "nse":"Reference/manual or permitted published data; no automated scraping",
+        "nse":"Reference/public published data; exchange endpoints may be unavailable without licensed/member access",
         "tradingview":"Reference source; no automated scraping",
         "bank_constituents":"Editable basket in sources.py; verify against current official Nifty Bank file",
-        "options":"Best-effort public options adapter; missing data => WAIT",
+        "options":"Best-effort public options adapter with OI/change-OI/IV/max-pain when available; missing data => WAIT",
         "nse_holiday_calendar":NSE_HOLIDAYS_2026,
         "generated_at":datetime.now(timezone.utc).isoformat()
     }

@@ -28,7 +28,7 @@ def enrich(df):
         if c not in x: x[c]=0.0
         x[c]=pd.to_numeric(x[c],errors="coerce")
     x=x.dropna(subset=["close"])
-    for n in (9,21,50,200): x[f"ema{n}"]=ema(x.close,n)
+    for n in (9,20,21,50,200): x[f"ema{n}"]=ema(x.close,n)
     x["sma20"]=sma(x.close,20); x["rsi"]=rsi(x.close); x["atr"]=atr(x)
     ml,ms,mh=macd(x.close); x["macd"]=ml; x["macd_signal"]=ms; x["macd_hist"]=mh
     x["stoch"]=stochastic(x); x["adx"]=adx(x)
@@ -36,5 +36,5 @@ def enrich(df):
     x["vol_ma20"]=x.volume.rolling(20).mean(); x["bb_mid"]=sma(x.close,20); x["bb_std"]=x.close.rolling(20).std(); x["bb_hi"]=x.bb_mid+2*x.bb_std; x["bb_lo"]=x.bb_mid-2*x.bb_std
     x["roc10"]=x.close.pct_change(10)*100; x["momentum10"]=x.close.diff(10)
     x["obv"]=(np.sign(x.close.diff()).fillna(0)*x.volume).cumsum()
-    x["day_high"]=x.high.cummax(); x["day_low"]=x.low.cummin()
+    x["day_high"]=x.high.cummax(); x["day_low"]=x.low.cummin(); x["support20"]=x.low.rolling(20).min(); x["resistance20"]=x.high.rolling(20).max()
     return x

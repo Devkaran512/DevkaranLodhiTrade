@@ -19,37 +19,34 @@ def analyse(df):
     bull=bear=0; reasons=[]
     def add(cond,label):
         nonlocal bull,bear
-        if cond: bull+=1; reasons.append("+")
-        else: bear+=1; reasons.append("-")
-    add(r.close>r.ema9,"EMA9"); add(r.ema9>r.ema21,"EMA21"); add(r.ema21>r.ema50,"EMA50")
-    add(r.close>r.vwap,"VWAP"); add(r.macd_hist>0,"MACD"); add(r.rsi>55,"RSI") if r.rsi>=45 else add(False,"RSI")
-    add(r.adx>=20 and r.close>p.close,"ADX/momentum") if r.adx>=20 else None
-    if r.volume>r.vol_ma20 if r.vol_ma20>0 else False: add(r.close>p.close,"volume")
+        if cond: bull+=1; reasons.append("+"+label)
+        else: bear+=1; reasons.append("-"+label)
+    add(r.close>r.ema9,"EMA9"); add(r.ema9>r.ema21,"EMA21"); add(r.ema21>r.ema50,"EMA50"); add(r.close>r.ema200,"EMA200")
+    add(r.close>r.vwap,"VWAP"); add(r.macd_hist>0,"MACD")
+    if r.rsi>=55: add(True,"RSI")
+    elif r.rsi<=45: add(False,"RSI")
+    if r.adx>=20: add(r.close>p.close,"ADX/momentum")
+    if r.vol_ma20>0 and r.volume>r.vol_ma20: add(r.close>p.close,"volume")
     add(r.close>r.sma20,"SMA20")
     total=bull+bear
-    if total<5 or bull==bear: return Signal("WAIT",50,message="Factors are mixed")
+    if total<6 or bull==bear: return Signal("WAIT",50,message="Factors are mixed")
     raw=50+50*abs(bull-bear)/total
     if raw<MIN_SIGNAL_SCORE: return Signal("WAIT",round(raw,1),message="No sufficiently aligned setup")
     side="CALL" if bull>bear else "PUT"; entry=float(r.close); av=float(r.atr)
     sl=entry-1.25*av if side=="CALL" else entry+1.25*av
     target=entry+2.0*(entry-sl) if side=="CALL" else entry-2.0*(sl-entry)
-    return Signal(side,round(raw,1),entry,sl,target,"Technical factors aligned")
+    return Signal(side,round(raw,1),entry,sl,target,"Technical factors aligned: "+", ".join(reasons[-5:]))
 
 def final_signal(df):
     base=analyse(df)
     if base.action=="WAIT": return base
-    # Cross-check with current banking breadth.
-    basket=basket_snapshot(); g=global_snapshot(); opt=option_snapshot()
-    breadth=(sum(1 for x in basket if x["change_pct"]>0),sum(1 for x in basket if x["change_pct"]<0)) if basket else (0,0)
-    side=base.action
+    basket=basket_snapshot(); opt=option_snapshot()
     if basket:
-        up,down=breadth
-        if side=="CALL" and down>up: return Signal("WAIT",base.score,message="BANK constituent breadth conflicts")
-        if side=="PUT" and up>down: return Signal("WAIT",base.score,message="BANK constituent breadth conflicts")
-    # Options are confirmation only; absence never becomes fake data.
-    if opt.get("available"):
-        pcr=opt["put_oi"]/opt["call_oi"] if opt["call_oi"] else None
-        if pcr is not None:
-            if side=="CALL" and pcr<0.70: return Signal("WAIT",base.score,message="Options positioning does not confirm CALL")
-            if side=="PUT" and pcr>1.45: return Signal("WAIT",base.score,message="Options positioning does not confirm PUT")
+        up=sum(1 for x in basket if x["change_pct"]>0); down=sum(1 for x in basket if x["change_pct"]<0)
+        if base.action=="CALL" and down>up*1.4: return Signal("WAIT",base.score,message="BANK constituent breadth conflicts")
+        if base.action=="PUT" and up>down*1.4: return Signal("WAIT",base.score,message="BANK constituent breadth conflicts")
+    if opt.get("available") and opt.get("call_oi"):
+        pcr=opt["put_oi"]/opt["call_oi"]
+        if base.action=="CALL" and pcr<0.60: return Signal("WAIT",base.score,message="Options positioning does not confirm CALL")
+        if base.action=="PUT" and pcr>1.60: return Signal("WAIT",base.score,message="Options positioning does not confirm PUT")
     return base

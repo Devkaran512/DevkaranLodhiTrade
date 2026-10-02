@@ -1,26 +1,30 @@
-# DevkaranLodhiTrade — Public Data Prediction v5 UI
+# DevkaranLodhiTrade — Production BANKNIFTY Prediction Engine
 
-Prediction-only BANKNIFTY Android client with a clean, responsive native UI.
+Prediction-only BANKNIFTY Android client + FastAPI Render backend. **Demo mode is not included in this production build.** No Groww login, order placement, or broker execution.
 
-## UI v5
-- Clean card-based layout
-- Large, readable current signal
-- Responsive weighted trade-level cards
-- Scrollable layout for small screens
-- No overlapping text
-- Clear backend connection section
-- Live connection indicator
-- Backend URL is remembered; API key is not stored
-- Signal polling every 60 seconds after Start Live Signal
+## Production engine
+- Live/public BANKNIFTY candles with safe fallback (never fabricates data)
+- EMA 9/20/21/50/200, VWAP, RSI, MACD, ATR, ADX, Stochastic, Bollinger bands, ROC, OBV
+- Support/resistance and volume expansion
+- Banking constituent breadth
+- Public global-market context: US/Asia/VIX/crude/DXY/USDINR where available
+- Public options context: call/put OI, volume, change-OI, IV and max-pain where the public adapter exposes them
+- Best-effort NSE FII/FPI + DII report adapter; unavailable data is explicitly marked unavailable
+- Public news/event classification: RBI/banking, macro, US rates, crude, FX and geopolitics
+- Historical shock/crash knowledge base and similarity context
+- Regime-change / reversal-risk checks
+- Explainable evidence, warnings and invalidation context
+- Multiple horizon labels and expected validity window
+- 1-year historical technical backtest endpoint and in-app backtest button
+- Manual position monitoring: CALL/PUT, strike, entry premium, quantity, underlying invalidation/target; thesis-reversal alert
+- Strong-evidence sound/vibration-style alert while the app is active
+- API URL and API key reconnect; API key is encrypted with Android Keystore before local persistence
 
-## Backend
-Set the Render Web Service URL and the generated `BACKEND_API_KEY` in the Android app.
+## Important data limitation
+This is a public-data decision-support system, not a guaranteed prediction system. Some exchange-grade real-time data, participant positioning, option-chain fields, news feeds, or historical series may be unavailable from public endpoints. The engine returns `WAIT`/unavailable states instead of inventing values. True continuous option-premium P&L requires a live option-price feed; Groww execution/login is intentionally not implemented.
 
-This app does not place trades and does not require Groww login, token, or order API.
+## Render
+`render.yaml` keeps the existing FastAPI service. The Android app calls `/signal`; `/analysis` exposes the richer analysis object; `/backtest` runs the historical technical test.
 
-
-## v6 UI/session update
-- Header respects Android system-bar insets so `DevkaranLodhiTrade` does not overlap the status bar.
-- On NSE holidays/weekends, the backend labels the result as a **next trading session** setup.
-- If intraday public candles are unavailable, the backend attempts a longer daily-history fallback; it never fabricates candles.
-- 02-Oct-2026 is an NSE holiday (Mahatma Gandhi Jayanti); 03-Oct-2026 is Saturday, so the next regular session is Monday 05-Oct-2026.
+## Android
+Set the actual Render HTTPS URL and generated `BACKEND_API_KEY`, then tap **START LIVE SIGNAL**. The app polls every 60 seconds while active.

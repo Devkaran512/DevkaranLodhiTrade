@@ -1,14 +1,28 @@
-from fastapi import FastAPI,Header,HTTPException
+from fastapi import FastAPI, Header, HTTPException
 from .config import BACKEND_API_KEY
 from .sources import candles, source_status, BANKNIFTY, market_state
 from .strategy import final_signal
-app=FastAPI(title="DevkaranLodhiTrade Public-Data Prediction API",version="1.1")
+from .intelligence import build_intelligence
+from .backtest import run_backtest
+
+app=FastAPI(title="DevkaranLodhiTrade Production Prediction API",version="2.0")
 
 def auth(k):
     if k!=BACKEND_API_KEY: raise HTTPException(401,"Invalid backend API key")
 
+def make_signal(interval="5m"):
+    state=market_state(); df=candles(BANKNIFTY,interval=interval)
+    s=final_signal(df)
+    intel=build_intelligence(df,s)
+    action=intel.get("action",s.action); score=intel.get("score",s.score)
+    msg=s.message
+    if intel.get("warnings"): msg += " | " + "; ".join(intel["warnings"][:3])
+    if state["market_closed"] or getattr(df,"attrs",{}).get("fallback_interval"):
+        msg="Next-session setup based on latest available public candles. " + msg
+    return {"underlying":"BANKNIFTY","action":action,"score":score,"entry":s.entry,"stop_loss":s.stop_loss,"target":s.target,"message":msg,"timestamp":str(df.iloc[-1].timestamp),"market_closed":state["market_closed"],"session":state["session"],"data_interval":getattr(df,"attrs",{}).get("fallback_interval") or interval,"holiday":state["holiday"],"next_trading_date":state["next_trading_date"],"next_market_open":state["next_market_open"],"market_open":state["market_open"],"market_close":state["market_close"],"upcoming_holidays":state["upcoming_holidays"],"groww":False,"demo":False,"intelligence":intel}
+
 @app.get("/health")
-def health(): return {"status":"ok","mode":"prediction-only","groww":False,"demo":False,"service":"DevkaranLodhiTrade API"}
+def health(): return {"status":"ok","mode":"production-prediction","groww":False,"demo":False,"service":"DevkaranLodhiTrade API","engine_version":"2.0"}
 
 @app.get("/market")
 def market(x_api_key:str=Header(default="")):
@@ -19,17 +33,18 @@ def sources(x_api_key:str=Header(default="")):
     auth(x_api_key); return source_status()
 
 @app.get("/signal")
-def signal(x_api_key:str=Header(default=""),interval:str="5m"):
+def signal(x_api_key:str=Header(default=""), interval:str="5m"):
     auth(x_api_key)
-    state=market_state()
-    try:
-        df=candles(BANKNIFTY,interval=interval)
-        s=final_signal(df)
-        fallback=getattr(df, "attrs", {}).get("fallback_interval")
-        if state["market_closed"] or fallback:
-            msg=("Next-session setup based on the latest available public candles"
-                 if fallback or state["market_closed"] else s.message)
-        else: msg=s.message
-        return {"underlying":"BANKNIFTY","action":s.action,"score":s.score,"entry":s.entry,"stop_loss":s.stop_loss,"target":s.target,"message":msg,"timestamp":str(df.iloc[-1].timestamp),"market_closed":state["market_closed"],"session":state["session"],"data_interval":fallback or interval,"holiday":state["holiday"],"next_trading_date":state["next_trading_date"],"next_market_open":state["next_market_open"],"market_open":state["market_open"],"market_close":state["market_close"],"upcoming_holidays":state["upcoming_holidays"],"groww":False,"demo":False}
+    try: return make_signal(interval)
     except Exception as e:
+        state=market_state()
         return {"underlying":"BANKNIFTY","action":"WAIT","score":0,"entry":None,"stop_loss":None,"target":None,"message":(("Market closed; no usable historical public candles are currently available" if state["market_closed"] else "Live public data unavailable")+": "+str(e)[:180]),"market_closed":state["market_closed"],"session":state["session"],"holiday":state["holiday"],"next_trading_date":state["next_trading_date"],"next_market_open":state["next_market_open"],"market_open":state["market_open"],"market_close":state["market_close"],"upcoming_holidays":state["upcoming_holidays"],"groww":False,"demo":False}
+
+@app.get("/analysis")
+def analysis(x_api_key:str=Header(default=""), interval:str="5m"):
+    auth(x_api_key); return make_signal(interval)
+
+@app.get("/backtest")
+def backtest(x_api_key:str=Header(default=""), period:str="1y"):
+    auth(x_api_key)
+    return run_backtest(period=period)
