@@ -28,3 +28,10 @@ This is a public-data decision-support system, not a guaranteed prediction syste
 
 ## Android
 Set the actual Render HTTPS URL and generated `BACKEND_API_KEY`, then tap **START LIVE SIGNAL**. The app polls every 60 seconds while active.
+
+
+## UI & Alert Settings update (v8)
+- Premium dark 3D-depth trading dashboard with signal-state colors.
+- Alert Settings: master switch, ringtone picker, alert volume, test alarm, vibration patterns, event toggles, evidence threshold, market-hours/all-day/quiet-hours schedule.
+- Alert preferences are stored locally on the device.
+- Production/live engine only; no demo mode.

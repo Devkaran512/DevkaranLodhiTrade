@@ -4,6 +4,9 @@ import android.app.*;
 import android.content.*;
 import android.os.*;
 import android.util.Base64;
+import android.net.Uri;
+import android.media.MediaPlayer;
+import android.media.RingtoneManager;
 import androidx.core.app.NotificationCompat;
 import org.json.*;
 import java.io.*;
@@ -16,7 +19,7 @@ import java.util.*;
 
 public class PositionMonitorService extends Service {
     static final String CHANNEL="position_monitor";
-    static final String ALERT_CHANNEL="position_alerts_v2";
+    static final String ALERT_CHANNEL="position_alerts_v3";
     Handler handler=new Handler(Looper.getMainLooper());
     Runnable loop=this::poll;
     SharedPreferences prefs;
@@ -35,14 +38,10 @@ public class PositionMonitorService extends Service {
             NotificationChannel monitor=new NotificationChannel(CHANNEL,"Position Monitoring",NotificationManager.IMPORTANCE_LOW);
             monitor.setDescription("Background BANKNIFTY position monitoring");
             nm.createNotificationChannel(monitor);
-            android.net.Uri sound=android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_NOTIFICATION);
             NotificationChannel alerts=new NotificationChannel(ALERT_CHANNEL,"Trading Alerts",NotificationManager.IMPORTANCE_HIGH);
             alerts.setDescription("BANKNIFTY strong-signal, reversal and exit alerts");
-            alerts.enableVibration(true);
-            alerts.setVibrationPattern(new long[]{0,350,180,500});
-            alerts.setSound(sound,new android.media.AudioAttributes.Builder()
-                    .setUsage(android.media.AudioAttributes.USAGE_NOTIFICATION)
-                    .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION).build());
+            alerts.enableVibration(false);
+            alerts.setSound(null,null);
             nm.createNotificationChannel(alerts);
         }
     }
@@ -56,18 +55,54 @@ public class PositionMonitorService extends Service {
     }
 
     void alert(String title,String msg){
+        if(!prefs.getBoolean("alert_enabled",true) || !shouldAlertNow()) return;
+        if(title.contains("Strong CALL")&&!prefs.getBoolean("alert_event_strong_call",true))return;
+        if(title.contains("Strong PUT")&&!prefs.getBoolean("alert_event_strong_put",true))return;
+        if(title.contains("TARGET")&&!prefs.getBoolean("alert_event_position_target",true))return;
+        if(title.contains("STOP")&&!prefs.getBoolean("alert_event_position_stop",true))return;
+        if(title.contains("EXIT")&&!prefs.getBoolean("alert_event_call_put",true)&&!prefs.getBoolean("alert_event_put_call",true))return;
         NotificationManager nm=(NotificationManager)getSystemService(NOTIFICATION_SERVICE);
         nm.notify(2201,new NotificationCompat.Builder(this,ALERT_CHANNEL)
                 .setSmallIcon(android.R.drawable.ic_dialog_alert)
                 .setContentTitle(title).setContentText(msg)
                 .setStyle(new NotificationCompat.BigTextStyle().bigText(msg))
                 .setAutoCancel(true).setPriority(NotificationCompat.PRIORITY_HIGH)
-                .setDefaults(NotificationCompat.DEFAULT_SOUND|NotificationCompat.DEFAULT_VIBRATE).build());
-        if(Build.VERSION.SDK_INT>=26){
-            ((android.os.Vibrator)getSystemService(VIBRATOR_SERVICE))
-                    .vibrate(VibrationEffect.createWaveform(new long[]{0,300,180,500},-1));
-        }
+                .setSilent(true).build());
+        playAlertSound();
+        vibrateAlert();
     }
+
+    void playAlertSound(){
+        try{
+            String saved=prefs.getString("alert_tone_uri","");
+            Uri uri=saved.isEmpty()?RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION):Uri.parse(saved);
+            MediaPlayer mp=MediaPlayer.create(this,uri);
+            if(mp!=null){
+                float v=Math.max(0,Math.min(100,prefs.getInt("alert_volume",80)))/100f;
+                mp.setVolume(v,v);mp.setOnCompletionListener(MediaPlayer::release);mp.start();
+            }
+        }catch(Exception ignored){}
+    }
+    void vibrateAlert(){
+        if(!prefs.getBoolean("alert_vibration",true))return;
+        if(Build.VERSION.SDK_INT<26)return;
+        String p=prefs.getString("alert_vibration_pattern","Medium");
+        long[] pattern="Short".equals(p)?new long[]{0,180}:"Long".equals(p)?new long[]{0,450,150,450}:"Strong".equals(p)?new long[]{0,300,120,600,150,600}:new long[]{0,280,160,420};
+        ((android.os.Vibrator)getSystemService(VIBRATOR_SERVICE)).vibrate(VibrationEffect.createWaveform(pattern,-1));
+    }
+    boolean shouldAlertNow(){
+        String mode=prefs.getString("alert_schedule","Market hours only (09:15–15:40)");
+        Calendar c=Calendar.getInstance(TimeZone.getTimeZone("Asia/Kolkata"));
+        int mins=c.get(Calendar.HOUR_OF_DAY)*60+c.get(Calendar.MINUTE);
+        if("All day".equals(mode))return true;
+        if("Custom quiet hours".equals(mode)){
+            int qs=parseTime(prefs.getString("quiet_start","22:00")), qe=parseTime(prefs.getString("quiet_end","07:00"));
+            boolean quiet=qs<=qe ? mins>=qs&&mins<qe : mins>=qs||mins<qe;
+            return !quiet;
+        }
+        return mins>=555&&mins<=940;
+    }
+    int parseTime(String s){try{String[] p=s.split(":");return Integer.parseInt(p[0])*60+Integer.parseInt(p[1]);}catch(Exception e){return 0;}}
 
     void poll(){
         String pt=prefs.getString("pt","").toUpperCase(Locale.US);
@@ -87,13 +122,13 @@ public class PositionMonitorService extends Service {
             if(code>=400)return;
             JSONObject j=new JSONObject(read(c.getInputStream()));
             String a=j.optString("action","WAIT");
-            double sc=j.optDouble("score",0);
+            double sc=j.optDouble("score",0);\n            int threshold=prefs.getInt("alert_threshold",85);
             JSONObject in=j.optJSONObject("intelligence");
 
             long now=System.currentTimeMillis();
             String lastStrongAction=prefs.getString("bg_last_strong_action","");
             long lastStrong=prefs.getLong("bg_last_strong_time",0);
-            if(("CALL".equals(a)||"PUT".equals(a))&&sc>=85&&
+            if(("CALL".equals(a)||"PUT".equals(a))&&sc>=threshold&&
                     (!a.equals(lastStrongAction)||now-lastStrong>10*60*1000L)){
                 prefs.edit().putString("bg_last_strong_action",a).putLong("bg_last_strong_time",now).apply();
                 alert("Strong "+a+" signal","BANKNIFTY "+a+" signal with evidence score "+
