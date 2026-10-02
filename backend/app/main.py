@@ -19,7 +19,7 @@ def make_signal(interval="5m"):
     if intel.get("warnings"): msg += " | " + "; ".join(intel["warnings"][:3])
     if state["market_closed"] or getattr(df,"attrs",{}).get("fallback_interval"):
         msg="Next-session setup based on latest available public candles. " + msg
-    return {"underlying":"BANKNIFTY","action":action,"score":score,"entry":s.entry,"stop_loss":s.stop_loss,"target":s.target,"message":msg,"timestamp":str(df.iloc[-1].timestamp),"market_closed":state["market_closed"],"session":state["session"],"data_interval":getattr(df,"attrs",{}).get("fallback_interval") or interval,"holiday":state["holiday"],"next_trading_date":state["next_trading_date"],"next_market_open":state["next_market_open"],"market_open":state["market_open"],"market_close":state["market_close"],"upcoming_holidays":state["upcoming_holidays"],"groww":False,"demo":False,"intelligence":intel}
+    return {"underlying":"BANKNIFTY","market_price":float(df.iloc[-1].close),"action":action,"score":score,"entry":s.entry,"stop_loss":s.stop_loss,"target":s.target,"message":msg,"timestamp":str(df.iloc[-1].timestamp),"market_closed":state["market_closed"],"session":state["session"],"data_interval":getattr(df,"attrs",{}).get("fallback_interval") or interval,"holiday":state["holiday"],"next_trading_date":state["next_trading_date"],"next_market_open":state["next_market_open"],"market_open":state["market_open"],"market_close":state["market_close"],"upcoming_holidays":state["upcoming_holidays"],"groww":False,"demo":False,"intelligence":intel}
 
 @app.get("/health")
 def health(): return {"status":"ok","mode":"production-prediction","groww":False,"demo":False,"service":"DevkaranLodhiTrade API","engine_version":"2.0"}
