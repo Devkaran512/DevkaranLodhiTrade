@@ -326,5 +326,15 @@ TextView valueText(){TextView v=text("—",16,TEXT);v.setTypeface(Typeface.DEFAU
     double parseNum(String v){try{return Double.parseDouble(v.trim());}catch(Exception e){return Double.NaN;}}
     void setLevelValue(TextView v,double d){v.setText(Double.isNaN(d)?"—":String.format(Locale.US,"%.2f",d));}
     int colorFor(String s){if(s.contains("CALL"))return GREEN;if(s.contains("PUT"))return RED;return WAIT;}
+    String read(InputStream is) throws IOException {
+        if(is==null)return "";
+        StringBuilder sb=new StringBuilder();
+        try(BufferedReader br=new BufferedReader(new InputStreamReader(is, "UTF-8"))){
+            String line;
+            while((line=br.readLine())!=null){if(sb.length()>0)sb.append("\n");sb.append(line);}
+        }
+        return sb.toString();
+    }
+
     void toast(String s){Toast.makeText(this,s,Toast.LENGTH_SHORT).show();}
 }
