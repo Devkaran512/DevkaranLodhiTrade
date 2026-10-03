@@ -50,3 +50,12 @@ Important: Render Free web services can restart/spin down, so this memory is int
 - BANKNIFTY relative strength versus NIFTY.
 - Expanded public option-chain context: ATM strike, near-ATM OI/volume, expiry regime, and Max Pain.
 - All new layers are supporting evidence only; no single factor can force a CALL/PUT signal.
+
+
+## V23 review-driven improvements
+- Market Intelligence UI is grouped into Market State, Signal Evidence, Risk & Decision Guard, History & Learning, and Supporting Details.
+- Public option-chain `change` is treated as option-price change, never as change in OI.
+- Historical change-in-OI remains explicitly unavailable unless a source provides prior OI snapshots.
+- Data Quality exposes per-factor availability and calibration limitations.
+- Learning factor reliability is marked PROVISIONAL/DEVELOPING/STABLE by sample count and does not automatically alter weights.
+- Backtest messaging explicitly distinguishes reconstructable historical factors from live-only factors.

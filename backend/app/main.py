@@ -5,7 +5,7 @@ from .strategy import final_signal
 from .intelligence import build_intelligence
 from .backtest import run_backtest
 
-app=FastAPI(title="DevkaranLodhiTrade Production Prediction API",version="2.0")
+app=FastAPI(title="DevkaranLodhiTrade Production Prediction API",version="2.3")
 
 def auth(k):
     if k!=BACKEND_API_KEY: raise HTTPException(401,"Invalid backend API key")
@@ -42,7 +42,7 @@ def make_signal(interval="5m"):
 @app.get("/health")
 def health(x_api_key:str=Header(default="")):
     auth(x_api_key)
-    return {"status":"ok","mode":"production-prediction","groww":False,"demo":False,"service":"DevkaranLodhiTrade API","engine_version":"2.0"}
+    return {"status":"ok","mode":"production-prediction","groww":False,"demo":False,"service":"DevkaranLodhiTrade API","engine_version":"2.3"}
 
 @app.get("/market")
 def market(x_api_key:str=Header(default="")):

@@ -206,8 +206,11 @@ def option_snapshot():
         chain=t.option_chain(exp)
         calls=chain.calls; puts=chain.puts
         call_oi=float(calls.openInterest.fillna(0).sum()); put_oi=float(puts.openInterest.fillna(0).sum())
-        call_chg=float(calls.get("change",pd.Series(dtype=float)).fillna(0).sum()) if "change" in calls else 0.0
-        put_chg=float(puts.get("change",pd.Series(dtype=float)).fillna(0).sum()) if "change" in puts else 0.0
+        # yfinance option-chain `change` is the OPTION PRICE change, not change in OI.
+        # Never treat it as delta-OI. Historical OI snapshots require a separate
+        # historical option-chain source; if unavailable we expose that limitation.
+        call_price_change=float(calls.get("change",pd.Series(dtype=float)).fillna(0).sum()) if "change" in calls else 0.0
+        put_price_change=float(puts.get("change",pd.Series(dtype=float)).fillna(0).sum()) if "change" in puts else 0.0
         call_iv=float(calls.get("impliedVolatility",pd.Series(dtype=float)).replace([float("inf"),-float("inf")],pd.NA).dropna().mean()) if "impliedVolatility" in calls else None
         put_iv=float(puts.get("impliedVolatility",pd.Series(dtype=float)).replace([float("inf"),-float("inf")],pd.NA).dropna().mean()) if "impliedVolatility" in puts else None
         # Max pain: strike with minimum total intrinsic payout from current OI.
@@ -235,7 +238,10 @@ def option_snapshot():
         except Exception: expiry_days=None
         return {"available":True,"expiry":exp,"expiry_days":expiry_days,"expiry_regime":"EXPIRY_DAY" if expiry_days==0 else ("NEAR_EXPIRY" if expiry_days<=2 else "NORMAL_EXPIRY"),"spot":spot,"atm_strike":atm,"near_atm":near,
                 "call_oi":call_oi,"put_oi":put_oi,"call_volume":float(calls.volume.fillna(0).sum()),"put_volume":float(puts.volume.fillna(0).sum()),
-                "call_change_oi":call_chg,"put_change_oi":put_chg,"avg_call_iv":call_iv,"avg_put_iv":put_iv,"max_pain":max_pain}
+                "call_price_change_aggregate":call_price_change,"put_price_change_aggregate":put_price_change,
+                "change_oi_available":False,
+                "oi_positioning_note":"Current public chain provides OI, volume and option-price change; historical OI delta is not inferred from the price-change field.",
+                "avg_call_iv":call_iv,"avg_put_iv":put_iv,"max_pain":max_pain}
     except Exception as e:
         return {"available":False,"reason":str(e)[:180]}
 

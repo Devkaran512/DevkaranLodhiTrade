@@ -6,6 +6,7 @@ from .flows import flow_snapshot
 from .psychology import psychology_snapshot
 from .learning import preview as learning_preview, record_cycle
 from .regimes import gap_snapshot, structure_snapshot, volatility_snapshot, time_regime, event_risk
+from .advanced import regime_snapshot, factor_conflict, false_signal_risk, shock_snapshot, risk_snapshot, horizon_snapshot
 from .sources import candles
 
 _LAST = {"action": None, "score": None, "factors": {}}
@@ -203,10 +204,24 @@ def build_intelligence(df, base_signal):
     if news.get("items") and len([n for n in news["items"] if n.get("category") in ("RBI/BANKING","MACRO","US RATES","CRUDE","GEOPOLITICS","FX")])>=5: warnings.append("Multiple macro/banking/geopolitical headlines are active")
 
     action="CALL" if aggregate>=18 else ("PUT" if aggregate<=-18 else "WAIT")
+
+    # Advanced decision guards: regime, factor conflict, false-signal risk and shocks.
+    advanced_regime=regime_snapshot(r,p,volreg,structure,psych,evrisk,vix_change)
+    conflict=factor_conflict(available)
+    false_risk=false_signal_risk(r,volreg,structure,evrisk,psych,rel)
+    shock=shock_snapshot(r,p,glob,news,volreg,breadth)
+    # A high conflict is a reason to wait rather than force a directional call/put.
+    if action in ("CALL","PUT") and conflict.get("level")=="HIGH" and abs(aggregate)<28:
+        action="WAIT"
+
     # Require cross-factor confirmation: at least 3 non-identical factors must support the side.
     supporting=[f for f in available if (f["score"]>=12 if action=="CALL" else f["score"]<=-12 if action=="PUT" else abs(f["score"])<12)]
     if action in ("CALL","PUT") and len(supporting)<3: action="WAIT"
+    risk_level_obj=risk_snapshot(action,r,volreg,false_risk,conflict,evrisk)
     score=50+abs(aggregate)/2
+    if conflict.get("level")=="HIGH": score-=8
+    if false_risk.get("level")=="HIGH": score-=6
+    if shock.get("active"): score-=5
     if action=="WAIT": score=min(score,69)
 
     if action=="CALL":
@@ -256,6 +271,25 @@ def build_intelligence(df, base_signal):
         if f["direction"]!="NEUTRAL": evidence.append(f"{f['name']}: {f['direction']} ({f['score']:+.1f})")
     evidence += [f"Signal requires multi-factor confirmation: {len(supporting)} supporting factors"]
 
+    quality_checks=[
+        ("Technical", True),
+        ("Options", bool(opt.get("available"))),
+        ("Banking Breadth", bool(basket)),
+        ("Global Markets", bool(glob)),
+        ("Institutional Flows", bool(flows.get("available"))),
+        ("News", bool(news.get("items"))),
+        ("Psychology", bool(psych.get("available"))),
+    ]
+    data_quality={
+        "score":round(100.0*sum(1 for _,ok in quality_checks)/len(quality_checks),1),
+        "available_factors":[name for name,ok in quality_checks if ok],
+        "missing_factors":[name for name,ok in quality_checks if not ok],
+        "checks":{name:bool(ok) for name,ok in quality_checks},
+        "options_oi_delta_available":bool(opt.get("change_oi_available",False)),
+        "policy":"Missing live factors are not converted into fake bullish/bearish evidence; available-factor weights are normalised.",
+        "confidence_note":"Evidence score is not a calibrated probability until sufficient out-of-sample outcomes are collected."
+    }
+
     return {
         "available":True,"action":action,"base_action":base_signal.action,"score":round(_clamp(score,0,100),1),
         "aggregate_direction":round(aggregate,1),"factor_scores":factors,"technical_indicators":indicator_scores,
@@ -263,7 +297,16 @@ def build_intelligence(df, base_signal):
         "signal_change":{"changed":bool(previous.get("action") and previous.get("action")!=action),"from":previous.get("action"),"to":action,"drivers":change_drivers},
         "breadth":breadth,"global":glob,"options":opt,"institutional_flows":flows,"news":news,"historical_similarity":sim,"psychology":psych,"learning":learning_context,
         "market_structure":structure,"gap":gap,"volatility_regime":volreg,"time_regime":timereg,"event_risk":evrisk,"relative_strength":rel,
-        "regime":"RISK-OFF" if risk_off else ("TREND" if r.adx>=20 else "RANGE"),
+        "data_quality":data_quality,
+        "advanced":{
+            "regime":advanced_regime,
+            "factor_conflict":conflict,
+            "false_signal_risk":false_risk,
+            "market_shock":shock,
+            "risk":risk_level_obj,
+            "multi_horizon":horizon_snapshot(action,advanced_regime.get("regime","RANGE"),risk_level_obj.get("level","LOW"))
+        },
+        "regime":advanced_regime.get("regime") or ("RISK-OFF" if risk_off else ("TREND" if r.adx>=20 else "RANGE")),
         "expected_validity":"5-15 min to next major data/news shock" if action in ("CALL","PUT") else "Reassess on next signal cycle",
         "time_horizons":{"intraday":"5-15m / 30m-few hours","next_day":"next trading session","swing":"2-5 days","medium":"1-4 weeks"}
     }

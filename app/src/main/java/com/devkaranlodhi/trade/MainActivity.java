@@ -38,7 +38,7 @@ public class MainActivity extends Activity {
     LinearLayout signalCard, connectionCard;
     TextView action, market, updated, status, connectionDot, marketBadge, nextOpen, score, regime, reversal, horizons, optionSummary, breadthSummary, flowSummary, newsSummary, factorSummary, psychologySummary, changeSummary, learningSummary, positionStatus, positionHealth;
     TextView entryValue, stopValue, targetValue;
-    TextView structureSummary, volatilitySummary, regimeSummary, eventRiskSummary, relativeSummary;
+    TextView structureSummary, volatilitySummary, regimeSummary, eventRiskSummary, relativeSummary, advancedSummary;
     boolean connected=false;
     JSONObject lastIntel;
     EditText url,key,posType,posStrike,posEntry,posQty,posSL,posTarget;
@@ -128,19 +128,82 @@ public class MainActivity extends Activity {
     }
 
     void showInfo(){
-        LinearLayout panel=new LinearLayout(this);panel.setOrientation(LinearLayout.VERTICAL);panel.setPadding(dp(4),dp(2),dp(4),dp(2));ScrollView sv=new ScrollView(this);sv.addView(panel);
-        TextView intro=text("BANKNIFTY INFORMATION CENTER",19,TEXT);intro.setTypeface(Typeface.DEFAULT,Typeface.BOLD);panel.addView(intro,margin(0,6));TextView desc=text("Future-reference information is kept here so the main trading screen stays focused.",11,MUTED);panel.addView(desc,margin(0,14));
-        LinearLayout intel=card();TextView it=text("MARKET INTELLIGENCE",12,MUTED);it.setTypeface(Typeface.DEFAULT,Typeface.BOLD);intel.addView(it,margin(0,8));TextView ir=text("Regime: —",14,TEXT);TextView ib=text("Bank breadth: —",12,MUTED);TextView io=text("Options: —",12,MUTED);TextView iff=text("Institutional flows: —",12,MUTED);TextView inn=text("News/event context: —",12,MUTED);TextView irv=text("Reversal risks: —",12,MUTED);intel.addView(ir);intel.addView(ib,margin(0,6));intel.addView(io,margin(0,6));intel.addView(iff,margin(0,6));intel.addView(inn,margin(0,6));intel.addView(irv,margin(0,6));
-        TextView fh=text("MULTI-FACTOR SCOREBOARD",11,MUTED);fh.setTypeface(Typeface.DEFAULT,Typeface.BOLD);intel.addView(fh,margin(0,12));TextView fs=text("Factors: —",12,TEXT);intel.addView(fs);TextView ps=text("Psychology: —",12,MUTED);intel.addView(ps,margin(0,6));structureSummary=text("Market structure: —",12,MUTED);intel.addView(structureSummary,margin(0,6));volatilitySummary=text("Volatility: —",12,MUTED);intel.addView(volatilitySummary,margin(0,6));regimeSummary=text("Gap/time regime: —",12,MUTED);intel.addView(regimeSummary,margin(0,6));eventRiskSummary=text("Event risk: —",12,MUTED);intel.addView(eventRiskSummary,margin(0,6));relativeSummary=text("Relative strength: —",12,MUTED);intel.addView(relativeSummary,margin(0,6));TextView cs=text("Signal change: —",12,MUTED);intel.addView(cs,margin(0,6));TextView ls=text("Learning memory: —",12,MUTED);intel.addView(ls,margin(0,6));
-        TextView eh=text("Supporting evidence",11,MUTED);eh.setTypeface(Typeface.DEFAULT,Typeface.BOLD);intel.addView(eh,margin(0,10));LinearLayout ev=list();intel.addView(ev);TextView wh=text("Warnings / invalidation",11,MUTED);wh.setTypeface(Typeface.DEFAULT,Typeface.BOLD);intel.addView(wh,margin(0,10));LinearLayout wa=list();intel.addView(wa);TextView hz=text("Horizons: —",11,MUTED);intel.addView(hz,margin(0,10));
-        TextView simh=text("Historical similarity",11,MUTED);simh.setTypeface(Typeface.DEFAULT,Typeface.BOLD);intel.addView(simh,margin(0,12));LinearLayout sim=list();intel.addView(sim);panel.addView(intel,margin(0,8));
-        LinearLayout hc=card();TextView h=text("NSE HOLIDAY CALENDAR 2026",12,MUTED);h.setTypeface(Typeface.DEFAULT,Typeface.BOLD);hc.addView(h,margin(0,8));holidayList=list();hc.addView(holidayList);setDefaultHolidayCalendar();panel.addView(hc,margin(0,8));
-        TextView footer=text("Tip: use SETTINGS for alerts and CONNECT for backend URL/API key.",11,MUTED);panel.addView(footer,margin(0,8));
-        AlertDialog d=new AlertDialog.Builder(this).setView(sv).setPositiveButton("CLOSE",null).create();d.show();
-        // Bind the dialog views to the cached intelligence fields.
-        regime=ir; breadthSummary=ib; optionSummary=io; flowSummary=iff; newsSummary=inn;
-        reversal=irv; factorSummary=fs; psychologySummary=ps; changeSummary=cs; learningSummary=ls; evidenceList=ev; warningList=wa; horizons=hz; newsList=sim;
-        if(lastIntel!=null) renderIntel(lastIntel);
+        LinearLayout panel=new LinearLayout(this);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setPadding(dp(4),dp(2),dp(4),dp(2));
+        ScrollView sv=new ScrollView(this);sv.addView(panel);
+
+        TextView intro=text("BANKNIFTY INTELLIGENCE",19,TEXT);
+        intro.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
+        panel.addView(intro,margin(0,6));
+        TextView desc=text("A compact view of what the production engine sees. Details are grouped so the screen stays readable.",11,MUTED);
+        panel.addView(desc,margin(0,12));
+
+        LinearLayout state=card();
+        TextView sh=text("MARKET STATE",11,MUTED);sh.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
+        state.addView(sh,margin(0,7));
+        regime=text("Regime: —",14,TEXT);
+        breadthSummary=text("Bank breadth: —",12,MUTED);
+        volatilitySummary=text("Volatility: —",12,MUTED);
+        regimeSummary=text("Gap/time: —",12,MUTED);
+        relativeSummary=text("Relative strength: —",12,MUTED);
+        state.addView(regime);state.addView(breadthSummary,margin(0,6));
+        state.addView(volatilitySummary,margin(0,6));state.addView(regimeSummary,margin(0,6));
+        state.addView(relativeSummary,margin(0,6));
+        panel.addView(state,margin(0,7));
+
+        LinearLayout evidenceCard=card();
+        TextView eh=text("SIGNAL EVIDENCE",11,MUTED);eh.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
+        evidenceCard.addView(eh,margin(0,7));
+        factorSummary=text("Factors: —",12,TEXT);evidenceCard.addView(factorSummary);
+        psychologySummary=text("Psychology: —",12,MUTED);evidenceCard.addView(psychologySummary,margin(0,7));
+        structureSummary=text("Market structure: —",12,MUTED);evidenceCard.addView(structureSummary,margin(0,7));
+        optionSummary=text("Options: —",12,MUTED);evidenceCard.addView(optionSummary,margin(0,7));
+        flowSummary=text("Institutional flows: —",12,MUTED);evidenceCard.addView(flowSummary,margin(0,7));
+        newsSummary=text("News/events: —",12,MUTED);evidenceCard.addView(newsSummary,margin(0,7));
+        panel.addView(evidenceCard,margin(0,7));
+
+        LinearLayout riskCard=card();
+        TextView rh=text("RISK & DECISION GUARD",11,MUTED);rh.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
+        riskCard.addView(rh,margin(0,7));
+        advancedSummary=text("Decision guard: —",12,TEXT);riskCard.addView(advancedSummary);
+        eventRiskSummary=text("Event risk: —",12,MUTED);riskCard.addView(eventRiskSummary,margin(0,6));
+        reversal=text("Reversal risks: —",12,MUTED);riskCard.addView(reversal,margin(0,6));
+        changeSummary=text("Signal change: —",12,MUTED);riskCard.addView(changeSummary,margin(0,6));
+        panel.addView(riskCard,margin(0,7));
+
+        LinearLayout learnCard=card();
+        TextView lh=text("HISTORY & LEARNING",11,MUTED);lh.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
+        learnCard.addView(lh,margin(0,7));
+        learningSummary=text("Learning memory: —",12,TEXT);learnCard.addView(learningSummary);
+        TextView note=text("Historical evidence is advisory. Small samples do not automatically change factor weights.",10,MUTED);
+        learnCard.addView(note,margin(0,7));
+        panel.addView(learnCard,margin(0,7));
+
+        LinearLayout details=card();
+        TextView dh=text("SUPPORTING DETAILS",11,MUTED);dh.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
+        details.addView(dh,margin(0,7));
+        TextView evh=text("Supporting evidence",11,MUTED);evh.setTypeface(Typeface.DEFAULT,Typeface.BOLD);details.addView(evh);
+        evidenceList=list();details.addView(evidenceList,margin(0,4));
+        TextView wh=text("Warnings / invalidation",11,MUTED);wh.setTypeface(Typeface.DEFAULT,Typeface.BOLD);details.addView(wh,margin(0,8));
+        warningList=list();details.addView(warningList,margin(0,4));
+        horizons=text("Horizons: —",11,MUTED);details.addView(horizons,margin(0,8));
+        TextView simh=text("Historical similarity",11,MUTED);simh.setTypeface(Typeface.DEFAULT,Typeface.BOLD);details.addView(simh);
+        newsList=list();details.addView(newsList,margin(0,4));
+        panel.addView(details,margin(0,7));
+
+        LinearLayout hc=card();
+        TextView h=text("NSE HOLIDAY CALENDAR 2026",11,MUTED);h.setTypeface(Typeface.DEFAULT,Typeface.BOLD);
+        hc.addView(h,margin(0,7));holidayList=list();hc.addView(holidayList);setDefaultHolidayCalendar();
+        panel.addView(hc,margin(0,7));
+
+        TextView footer=text("INFO = analysis • CONNECT = backend • SETTINGS = alerts. Main screen stays focused on live signal and position.",10,MUTED);
+        panel.addView(footer,margin(0,6));
+
+        AlertDialog d=new AlertDialog.Builder(this).setView(sv).setPositiveButton("CLOSE",null).create();
+        d.show();
+        if(d.getWindow()!=null){d.getWindow().setBackgroundDrawable(rounded(SURFACE,24));d.getWindow().setLayout(-1,-2);}
+        if(lastIntel!=null)renderIntel(lastIntel);
     }
 
     void copyLines(LinearLayout src,LinearLayout dst){if(src==null||dst==null)return;for(int i=0;i<src.getChildCount();i++){View v=src.getChildAt(i);if(v instanceof TextView){TextView t=(TextView)v;TextView n=text(t.getText().toString(),t.getTextSize()/getResources().getDisplayMetrics().scaledDensity,t.getCurrentTextColor());dst.addView(n,margin(0,5));}}}
@@ -219,14 +282,28 @@ TextView valueText(){TextView v=text("—",16,TEXT);v.setTypeface(Typeface.DEFAU
         JSONObject br=in.optJSONObject("breadth");
         if(br!=null&&breadthSummary!=null)breadthSummary.setText("Bank breadth: "+br.optInt("up")+" up / "+br.optInt("down")+" down of "+br.optInt("total"));
         JSONObject op=in.optJSONObject("options");
-        if(optionSummary!=null)optionSummary.setText("Options: "+(op==null?"—":(op.optBoolean("available",false)?"OI/PCR • ATM "+op.optString("atm_strike","—")+" • expiry "+op.optString("expiry_regime","—")+" • Max Pain "+op.optString("max_pain","—"):"unavailable")));
+        if(optionSummary!=null)optionSummary.setText("Options: "+(op==null?"—":(op.optBoolean("available",false)?"ATM "+op.optString("atm_strike","—")+" • expiry "+op.optString("expiry_regime","—")+" • Max Pain "+op.optString("max_pain","—")+(op.optBoolean("change_oi_available",false)?" • ΔOI available":" • ΔOI unavailable"):"unavailable")));
         JSONObject fl=in.optJSONObject("institutional_flows");
         if(flowSummary!=null)flowSummary.setText("Institutional flows: "+(fl!=null&&fl.optBoolean("available",false)?"NSE FII/FPI + DII report available":"unavailable / exchange response not available"));
         JSONObject nw=in.optJSONObject("news");
         if(newsSummary!=null)newsSummary.setText("News/event context: "+(nw!=null&&nw.optBoolean("available",false)&&nw.optJSONArray("items")!=null?nw.optJSONArray("items").length()+" recent public headlines classified":"unavailable"));
         if(reversal!=null)reversal.setText("Reversal risks: "+join(in.optJSONArray("reversal_risks")));
         JSONArray factors=in.optJSONArray("factor_scores");
-        if(factorSummary!=null){StringBuilder fb=new StringBuilder();if(factors!=null){for(int i=0;i<factors.length();i++){JSONObject f=factors.optJSONObject(i);if(f==null)continue;if(fb.length()>0)fb.append("\n");fb.append(f.optString("name","Factor")).append(": ").append(f.optString("direction","NEUTRAL")).append(" ").append(String.format(Locale.US,"%+.1f",f.optDouble("score",0))).append(" • weight ").append(f.optInt("weight",0));}}JSONArray ti=in.optJSONArray("technical_indicators");if(ti!=null&&ti.length()>0){fb.append("\nTechnical indicators:");for(int i=0;i<ti.length();i++){JSONObject z=ti.optJSONObject(i);if(z==null)continue;fb.append("\n  ").append(z.optString("name","Indicator")).append(" ").append(String.format(Locale.US,"%+.0f",z.optDouble("score",0)));}}factorSummary.setText(fb.length()==0?"Factors: unavailable":"Factors:\n"+fb.toString());}
+        if(factorSummary!=null){
+            StringBuilder fb=new StringBuilder();
+            if(factors!=null){
+                int shown=0;
+                for(int i=0;i<factors.length() && shown<7;i++){
+                    JSONObject f=factors.optJSONObject(i);if(f==null)continue;
+                    if(fb.length()>0)fb.append("\n");
+                    fb.append("• ").append(f.optString("name","Factor")).append("  ")
+                      .append(f.optString("direction","NEUTRAL")).append(" ")
+                      .append(String.format(Locale.US,"%+.1f",f.optDouble("score",0)));
+                    shown++;
+                }
+            }
+            factorSummary.setText(fb.length()==0?"Factors: unavailable":"Top factor evidence:\n"+fb.toString());
+        }
         JSONObject py=in.optJSONObject("psychology");
         if(psychologySummary!=null){if(py!=null&&py.optBoolean("available",false)){psychologySummary.setText("Psychology: "+py.optString("state","—")+" • Fear "+py.optDouble("fear",0)+" • Greed "+py.optDouble("greed",0)+" • Uncertainty "+py.optDouble("uncertainty",0)+"\n"+py.optString("interpretation",""));}else psychologySummary.setText("Psychology: unavailable");}
         JSONObject ch=in.optJSONObject("signal_change");
@@ -236,8 +313,11 @@ TextView valueText(){TextView v=text("—",16,TEXT);v.setTypeface(Typeface.DEFAU
         JSONObject gr=in.optJSONObject("gap"); JSONObject tr=in.optJSONObject("time_regime"); if(regimeSummary!=null){regimeSummary.setText("Gap/time regime: "+(gr==null?"—":gr.optString("type","—")+" "+String.format(Locale.US,"%+.2f%%",gr.optDouble("gap_pct",0)))+" • "+(tr==null?"—":tr.optString("label","—")));}
         JSONObject er=in.optJSONObject("event_risk"); if(eventRiskSummary!=null){eventRiskSummary.setText("Event risk: "+(er==null?"—":er.optString("level","NORMAL")+" • "+er.optInt("headline_count",0)+" relevant headlines"));}
         JSONObject rs=in.optJSONObject("relative_strength"); if(relativeSummary!=null){relativeSummary.setText("Relative strength: "+(rs==null?"unavailable":rs.optString("direction","—")+" • BANKNIFTY vs NIFTY "+String.format(Locale.US,"%+.2f%%",rs.optDouble("relative_pct",0))));}
+        JSONObject ad=in.optJSONObject("advanced"); if(advancedSummary!=null){if(ad!=null){JSONObject rg=ad.optJSONObject("regime"), cf=ad.optJSONObject("factor_conflict"), fr=ad.optJSONObject("false_signal_risk"), sh=ad.optJSONObject("market_shock"), rk=ad.optJSONObject("risk");StringBuilder ab=new StringBuilder("Decision guard: ");ab.append(rg==null?"—":rg.optString("regime","—"));ab.append(" • Risk ").append(rk==null?"—":rk.optString("level","—"));ab.append("\nFactor conflict: ").append(cf==null?"—":cf.optString("level","—"));ab.append(" • False-signal risk: ").append(fr==null?"—":fr.optString("level","—"));ab.append("\nMarket shock: ").append(sh==null?"—":sh.optString("severity","LOW"));if(sh!=null&&sh.optBoolean("active",false)&&sh.optJSONArray("triggers")!=null)ab.append(" • ").append(join(sh.optJSONArray("triggers")));JSONObject dq=in.optJSONObject("data_quality");if(dq!=null){ab.append("\nData quality: ").append(String.format(Locale.US,"%.0f",dq.optDouble("score",0))).append("/100");JSONArray miss=dq.optJSONArray("missing_factors");if(miss!=null&&miss.length()>0)ab.append(" • missing: ").append(join(miss));}advancedSummary.setText(ab.toString());}else advancedSummary.setText("Decision guard: unavailable");}
         JSONObject lm=in.optJSONObject("learning");
-        if(learningSummary!=null){if(lm!=null){JSONObject preview=lm.optJSONObject("current_preview");StringBuilder lb=new StringBuilder("Learning memory: ").append(lm.optInt("events_kept",0)).append(" events • ").append(lm.optInt("completed_observations",0)).append(" completed observations");if(preview!=null&&preview.optBoolean("available",false))lb.append("\nComparable completed setups: ").append(preview.optInt("sample_size",0)).append(" • avg 30m return ").append(String.format(Locale.US,"%+.4f%%",preview.optDouble("average_30m_return_pct",0)));else if(preview!=null)lb.append("\n").append(preview.optString("reason","Learning evidence not available yet"));lb.append("\nNo factor is permanently ignored; learning is advisory and bounded to available history.");learningSummary.setText(lb.toString());}else learningSummary.setText("Learning memory: unavailable");}
+        if(learningSummary!=null){if(lm!=null){JSONObject preview=lm.optJSONObject("current_preview");StringBuilder lb=new StringBuilder("Learning memory: ").append(lm.optInt("events_kept",0)).append(" events • ").append(lm.optInt("completed_observations",0)).append(" completed observations");if(preview!=null&&preview.optBoolean("available",false))lb.append("\nComparable completed setups: ").append(preview.optInt("sample_size",0)).append(" • avg 30m return ").append(String.format(Locale.US,"%+.4f%%",preview.optDouble("average_30m_return_pct",0)));else if(preview!=null)lb.append("\n").append(preview.optString("reason","Learning evidence not available yet"));lb.append("\nNo factor is permanently ignored; learning is advisory and bounded to available history.");
+            JSONObject rel=lm.optJSONObject("factor_reliability");
+            if(rel!=null && rel.length()>0)lb.append("\nFactor reliability: ").append(rel.length()).append(" tracked factors; small samples remain provisional.");learningSummary.setText(lb.toString());}else learningSummary.setText("Learning memory: unavailable");}
         if(evidenceList!=null){evidenceList.removeAllViews();forEach(in.optJSONArray("evidence"),evidenceList);}
         if(warningList!=null){warningList.removeAllViews();forEach(in.optJSONArray("warnings"),warningList);}
         if(horizons!=null)horizons.setText("Horizons: "+in.optJSONObject("time_horizons"));
@@ -255,8 +335,22 @@ TextView valueText(){TextView v=text("—",16,TEXT);v.setTypeface(Typeface.DEFAU
 
     void runBacktest(TextView out){String base=url.getText().toString().trim();if(base.endsWith("/"))base=base.substring(0,base.length()-1);final String baseUrl=base;final String apiKey=key.getText().toString().trim();if(baseUrl.isEmpty()||apiKey.isEmpty()){toast("Connect backend first");return;}backtestButton.setText("RUNNING…");new Thread(()->{HttpURLConnection c=null;try{URL u=new URL(baseUrl+"/backtest?period=1y");c=(HttpURLConnection)u.openConnection();c.setRequestMethod("GET");c.setConnectTimeout(12000);c.setReadTimeout(60000);c.setRequestProperty("Accept","application/json");c.setRequestProperty("X-API-Key",apiKey);int code=c.getResponseCode();String body=read(code<400?c.getInputStream():c.getErrorStream());if(body==null||body.trim().isEmpty())throw new IOException("Empty backend response (HTTP "+code+")");String result=parseBacktestResponse(body,code);runOnUiThread(()->{out.setText(result);backtestButton.setText("RUN 1Y BACKTEST");});}catch(Exception e){runOnUiThread(()->{out.setText("Backtest unavailable: "+friendlyBacktestError(e));backtestButton.setText("RUN 1Y BACKTEST");});}finally{if(c!=null)c.disconnect();}}).start();}
 
-    String parseBacktestResponse(String body,int code)throws Exception{String s=body.trim();if(code>=400){try{JSONObject err=new JSONObject(s);String detail=err.optString("detail",s);throw new IOException("HTTP "+code+": "+detail);}catch(JSONException je){throw new IOException("HTTP "+code+": "+s);}}Object rootJson=new JSONTokener(s).nextValue();if(rootJson instanceof String){String inner=((String)rootJson).trim();if(inner.startsWith("{")||inner.startsWith("[")){rootJson=new JSONTokener(inner).nextValue();}else{return "Backtest unavailable: "+inner;}}if(!(rootJson instanceof JSONObject))return "Backtest unavailable: backend returned non-object JSON";JSONObject j=(JSONObject)rootJson;if(!j.optBoolean("available",true))return "Backtest unavailable: "+j.optString("reason","insufficient clean history");StringBuilder b=new StringBuilder("Backtest samples: ").append(j.optInt("samples",0));Object horizonsObj=j.opt("horizons");JSONObject h=null;if(horizonsObj instanceof JSONObject)h=(JSONObject)horizonsObj;else if(horizonsObj instanceof String){String hs=((String)horizonsObj).trim();if(hs.startsWith("{"))try{h=new JSONObject(hs);}catch(JSONException ignored){}}if(h!=null){b.append("\n");for(String k:new String[]{"1d","3d","5d"}){Object hv=h.opt(k);JSONObject x=null;if(hv instanceof JSONObject)x=(JSONObject)hv;else if(hv instanceof String){String xs=((String)hv).trim();if(xs.startsWith("{"))try{x=new JSONObject(xs);}catch(JSONException ignored){}}if(x!=null)b.append(k).append(" win ").append(x.optDouble("win_rate_pct",0)).append("% • avg ").append(x.optDouble("avg_return_pct",0)).append("%\n");}}return b.toString().trim();}
-
+    String parseBacktestResponse(String body,int code)throws Exception{
+        String s=body.trim();
+        if(code>=400){try{JSONObject err=new JSONObject(s);throw new IOException("HTTP "+code+": "+err.optString("detail",s));}catch(JSONException je){throw new IOException("HTTP "+code+": "+s);}}
+        Object rootJson=new JSONTokener(s).nextValue();
+        if(rootJson instanceof String){String inner=((String)rootJson).trim();if(inner.startsWith("{"))rootJson=new JSONTokener(inner).nextValue();else return "Backtest unavailable: "+inner;}
+        if(!(rootJson instanceof JSONObject))return "Backtest unavailable: backend returned non-object JSON";
+        JSONObject j=(JSONObject)rootJson;
+        if(!j.optBoolean("available",true))return "Backtest unavailable: "+j.optString("reason","insufficient clean history");
+        StringBuilder b=new StringBuilder("V23 historical validation\nSamples: ").append(j.optInt("samples",0));
+        b.append("\nHistorical factors tested: ").append(j.optJSONArray("factor_coverage"));
+        JSONObject q=j.optJSONObject("data_quality");if(q!=null)b.append("\nData quality: ").append(q.optDouble("coverage_pct",0)).append("% clean history • cost model ").append(j.optJSONObject("cost_model")!=null?j.optJSONObject("cost_model").optDouble("round_trip_bps",0):0).append(" bps round-trip");
+        JSONObject h=j.optJSONObject("horizons");if(h!=null){b.append("\n");for(String k:new String[]{"1d","3d","5d"}){JSONObject x=h.optJSONObject(k);if(x!=null)b.append(k).append(" • win ").append(x.optDouble("win_rate_pct",0)).append("% • avg net ").append(x.optDouble("avg_return_pct",0)).append("% • PF ").append(String.valueOf(x.opt("profit_factor"))).append(" • max DD ").append(x.optDouble("max_drawdown_pct",0)).append("%\n");}}
+        JSONObject wf=j.optJSONObject("walk_forward");if(wf!=null){JSONObject test=wf.optJSONObject("test");b.append("Walk-forward OOS test:");if(test!=null){for(String k:new String[]{"1d","3d","5d"}){JSONObject x=test.optJSONObject(k);if(x!=null)b.append("\n").append(k).append(" win ").append(x.optDouble("win_rate_pct",0)).append("% • avg ").append(x.optDouble("avg_return_pct",0)).append("%");}}}
+        b.append("\nNote: historical public data cannot safely reconstruct historical options/news/FII-DII/psychology, so those factors are not invented in this backtest.");
+        return b.toString();
+    }
     String friendlyBacktestError(Exception e){String m=e.getMessage();if(m==null)m=e.toString();if(m.contains("String cannot be converted to JSONObject"))return "Backend returned horizons in an unexpected format. The app now accepts both JSON object and JSON-string responses; please retry.";return m;}
     void savePosition(){prefs.edit().putString("pt",posType.getText().toString()).putString("ps",posStrike.getText().toString()).putString("pe",posEntry.getText().toString()).putString("pq",posQty.getText().toString()).putString("pstop",posSL.getText().toString()).putString("ptarget",posTarget.getText().toString()).apply();positionStatus.setText("Active position • "+posType.getText()+" "+posStrike.getText()+" • entry premium "+posEntry.getText()+" • qty "+posQty.getText());positionHealth.setText("Position health: monitoring live thesis");positionHealth.setTextColor(GREEN);prefs.edit().remove("last_position_alert").apply();Intent i=new Intent(this,PositionMonitorService.class);if(Build.VERSION.SDK_INT>=26)startForegroundService(i);else startService(i);}
     void loadPosition(){posType.setText(prefs.getString("pt",""));posStrike.setText(prefs.getString("ps",""));posEntry.setText(prefs.getString("pe",""));posQty.setText(prefs.getString("pq",""));posSL.setText(prefs.getString("pstop",""));posTarget.setText(prefs.getString("ptarget",""));if(!posType.getText().toString().isEmpty()){positionStatus.setText("Active position • "+posType.getText()+" "+posStrike.getText());positionHealth.setText("Position health: monitoring live thesis");positionHealth.setTextColor(GREEN);Intent i=new Intent(this,PositionMonitorService.class);if(Build.VERSION.SDK_INT>=26)startForegroundService(i);else startService(i);}}

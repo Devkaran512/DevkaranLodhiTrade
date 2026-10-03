@@ -171,12 +171,18 @@ def preview(action, factors):
 
 def snapshot(action=None, score=None, factors=None):
     fs = _factor_snapshot(factors or []) if isinstance(factors, list) else (factors or {})
+    reliability=_factor_reliability()
+    # Do not present tiny samples as reliable evidence.
+    for name,stat in reliability.items():
+        stat["reliability_status"]="PROVISIONAL" if stat["samples"]<20 else ("STABLE" if stat["samples"]>=50 else "DEVELOPING")
+    recent=list(_completed)[-12:]
     return {
         "available": bool(_events),
         "storage": "bounded in-process memory; not durable on Render Free restart/spin-down",
         "events_kept": len(_events),
         "completed_observations": len(_completed),
-        "factor_reliability": _factor_reliability(),
+        "factor_reliability": reliability,
+        "recent_outcomes": recent,
         "similar_events": _similarity(fs, action) if action else [],
         "learning_policy": "Historical evidence is advisory; no factor is permanently ignored and weights are not auto-changed from small samples.",
         "last_event": _events[-1] if _events else None,
