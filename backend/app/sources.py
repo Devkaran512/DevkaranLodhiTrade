@@ -3,6 +3,7 @@ from datetime import datetime, date, time, timedelta, timezone
 from zoneinfo import ZoneInfo
 import pandas as pd
 import yfinance as yf
+import requests
 from .config import GLOBAL_SYMBOLS, LOOKBACK_PERIOD
 
 BANKNIFTY="^NSEBANK"
@@ -37,19 +38,58 @@ BANK_CONSTITUENTS={
     "AUBANK.NS":"AU Small Finance Bank"
 }
 
-def _download(symbol, period, interval):
-    df=yf.download(symbol, period=period, interval=interval, auto_adjust=False, progress=False, threads=False)
-    if df is None or df.empty:
-        df=yf.Ticker(symbol).history(period=period, interval=interval, auto_adjust=False)
-    if df is None or df.empty:
+def _download_yahoo_chart(symbol, period, interval):
+    # Direct Yahoo chart API fallback. This avoids depending entirely on yfinance
+    # when the Render runtime cannot complete yfinance's Yahoo query flow.
+    url=f"https://query1.finance.yahoo.com/v8/finance/chart/{requests.utils.quote(symbol, safe='')}"
+    params={"range":period,"interval":interval,"events":"history","includeAdjustedClose":"true"}
+    r=requests.get(url,params=params,headers={"User-Agent":"Mozilla/5.0 DevkaranLodhiTrade/production"},timeout=20)
+    r.raise_for_status()
+    payload=r.json()
+    result=((payload.get("chart") or {}).get("result") or [None])[0]
+    if not result:
+        err=((payload.get("chart") or {}).get("error") or {}).get("description") or "Yahoo chart returned no result"
+        raise RuntimeError(str(err))
+    ts=result.get("timestamp") or []
+    q=(result.get("indicators") or {}).get("quote") or [{}]
+    q=q[0] if q else {}
+    if not ts or not q.get("close"):
         raise RuntimeError(f"No public candle data for {symbol}")
-    if isinstance(df.columns,pd.MultiIndex):
-        df=df.xs(symbol,axis=1,level=-1,drop_level=True)
-    df=df.reset_index()
-    df.columns=[str(c).lower() for c in df.columns]
-    if "datetime" in df: df=df.rename(columns={"datetime":"timestamp"})
-    if "date" in df: df=df.rename(columns={"date":"timestamp"})
-    return df
+    n=min(len(ts),len(q.get("open",[])),len(q.get("high",[])),len(q.get("low",[])),len(q.get("close",[])),len(q.get("volume",[])))
+    rows=[]
+    for i in range(n):
+        c=q["close"][i]
+        if c is None: continue
+        rows.append({
+            "timestamp":pd.to_datetime(ts[i],unit="s",utc=True),
+            "open":q["open"][i],"high":q["high"][i],"low":q["low"][i],
+            "close":c,"volume":q["volume"][i] if q.get("volume") else 0
+        })
+    if not rows:
+        raise RuntimeError(f"No public candle data for {symbol}")
+    return pd.DataFrame(rows)
+
+def _download(symbol, period, interval):
+    last_error=None
+    try:
+        df=yf.download(symbol, period=period, interval=interval, auto_adjust=False, progress=False, threads=False)
+        if df is None or df.empty:
+            df=yf.Ticker(symbol).history(period=period, interval=interval, auto_adjust=False)
+        if df is not None and not df.empty:
+            if isinstance(df.columns,pd.MultiIndex):
+                df=df.xs(symbol,axis=1,level=-1,drop_level=True)
+            df=df.reset_index()
+            df.columns=[str(c).lower() for c in df.columns]
+            if "datetime" in df: df=df.rename(columns={"datetime":"timestamp"})
+            if "date" in df: df=df.rename(columns={"date":"timestamp"})
+            return df
+    except Exception as e:
+        last_error=e
+    try:
+        return _download_yahoo_chart(symbol,period,interval)
+    except Exception as e:
+        last_error=e
+    raise RuntimeError(f"No public candle data for {symbol}: {str(last_error)[:180]}")
 
 def candles(symbol=BANKNIFTY, period=LOOKBACK_PERIOD, interval="5m"):
     try:
