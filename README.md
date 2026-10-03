@@ -52,7 +52,7 @@ Important: Render Free web services can restart/spin down, so this memory is int
 - All new layers are supporting evidence only; no single factor can force a CALL/PUT signal.
 
 
-## V23 review-driven improvements
+## V24 review-driven improvements
 - Market Intelligence UI is grouped into Market State, Signal Evidence, Risk & Decision Guard, History & Learning, and Supporting Details.
 - Public option-chain `change` is treated as option-price change, never as change in OI.
 - Historical change-in-OI remains explicitly unavailable unless a source provides prior OI snapshots.

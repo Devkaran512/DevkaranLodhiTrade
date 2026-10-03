@@ -91,7 +91,6 @@ public class MainActivity extends Activity {
 
         LinearLayout hist=card();TextView hi=text("HISTORICAL SIMILARITY",11,MUTED);hi.setTypeface(Typeface.DEFAULT,Typeface.BOLD);hist.addView(hi,margin(0,8));TextView ht=text("Available from INFO • matches are context only, not guaranteed forecasts.",11,MUTED);hist.addView(ht);newsList=list();hist.addView(newsList);hist.setVisibility(View.GONE);root.addView(hist,margin(0,0));
 
-        LinearLayout bt=card();TextView bth=text("OUT-OF-SAMPLE BACKTEST",11,MUTED);bth.setTypeface(Typeface.DEFAULT,Typeface.BOLD);bt.addView(bth,margin(0,8));TextView btNote=text("Historical measurement of the production rules. It does not guarantee future results.",11,MUTED);bt.addView(btNote,margin(0,8));backtestButton=new Button(this);backtestButton.setText("RUN 1Y BACKTEST");bt.addView(backtestButton);TextView btResult=text("Backtest: not run",12,TEXT);btResult.setPadding(0,dp(8),0,0);bt.addView(btResult);backtestButton.setOnClickListener(v->runBacktest(btResult));root.addView(bt,margin(0,18));
 
         // Connection fields are kept off the main screen. They are edited only from CONNECT.
         url=field("Backend URL","https://devkaranlodhitrade-api.onrender.com",false);key=field("Backend API Key","Paste generated key",true);url.setVisibility(View.GONE);key.setVisibility(View.GONE);root.addView(url,new LinearLayout.LayoutParams(1,1));root.addView(key,new LinearLayout.LayoutParams(1,1));
@@ -102,11 +101,12 @@ public class MainActivity extends Activity {
     Button topButton(String label,int accent){Button b=new Button(this);b.setText(label);b.setTextSize(10);b.setTextColor(TEXT);b.setAllCaps(false);b.setPadding(dp(3),0,dp(3),0);b.setMinHeight(dp(42));b.setBackground(gradientStrokeButton(accent));return b;}
 
     void showMenu(){
-        String[] items={"↻  Refresh live signal","♥  Backend health","▣  Public data sources","ⓘ  About production engine"};
+        String[] items={"↻  Refresh live signal","♥  Backend health","▣  Public data sources","📊  Backtest & Performance","ⓘ  About production engine"};
         AlertDialog d=new AlertDialog.Builder(this).setTitle("☰  MENU").setItems(items,(dialog,which)->{
             if(which==0){ startPolling(); toast("Refreshing live signal…"); }
             else if(which==1){ checkBackendHealth(); }
             else if(which==2){ showDataSources(); }
+            else if(which==3){ showBacktestScreen(); }
             else { new AlertDialog.Builder(this).setTitle("DevkaranLodhiTrade").setMessage("Production BANKNIFTY prediction engine. Public market data, technical analysis, options context, institutional flows, news/events, historical similarity and position monitoring. No demo mode and no Groww order execution.").setPositiveButton("CLOSE",null).show(); }
         }).setNegativeButton("CLOSE",null).create();d.show();
     }
@@ -333,7 +333,44 @@ TextView valueText(){TextView v=text("—",16,TEXT);v.setTypeface(Typeface.DEFAU
     void saveApiKey(String value){try{KeyStore ks=KeyStore.getInstance("AndroidKeyStore");ks.load(null);if(!ks.containsAlias("dlt_api_key")){KeyGenerator kg=KeyGenerator.getInstance("AES","AndroidKeyStore");kg.init(new android.security.keystore.KeyGenParameterSpec.Builder("dlt_api_key",android.security.keystore.KeyProperties.PURPOSE_ENCRYPT|android.security.keystore.KeyProperties.PURPOSE_DECRYPT).setBlockModes(android.security.keystore.KeyProperties.BLOCK_MODE_GCM).setEncryptionPaddings(android.security.keystore.KeyProperties.ENCRYPTION_PADDING_NONE).build());kg.generateKey();}SecretKey k=((KeyStore.SecretKeyEntry)ks.getEntry("dlt_api_key",null)).getSecretKey();Cipher c=Cipher.getInstance("AES/GCM/NoPadding");c.init(Cipher.ENCRYPT_MODE,k);String iv=Base64.encodeToString(c.getIV(),Base64.NO_WRAP);String ct=Base64.encodeToString(c.doFinal(value.getBytes("UTF-8")),Base64.NO_WRAP);prefs.edit().putString("key_iv",iv).putString("key_ct",ct).apply();}catch(Exception ignored){}}
     String loadApiKey(){try{String ivs=prefs.getString("key_iv","");String cts=prefs.getString("key_ct","");if(ivs.isEmpty()||cts.isEmpty())return "";KeyStore ks=KeyStore.getInstance("AndroidKeyStore");ks.load(null);SecretKey k=((KeyStore.SecretKeyEntry)ks.getEntry("dlt_api_key",null)).getSecretKey();Cipher c=Cipher.getInstance("AES/GCM/NoPadding");c.init(Cipher.DECRYPT_MODE,k,new GCMParameterSpec(128,Base64.decode(ivs,Base64.NO_WRAP)));return new String(c.doFinal(Base64.decode(cts,Base64.NO_WRAP)),"UTF-8");}catch(Exception e){return "";}}
 
-    void runBacktest(TextView out){String base=url.getText().toString().trim();if(base.endsWith("/"))base=base.substring(0,base.length()-1);final String baseUrl=base;final String apiKey=key.getText().toString().trim();if(baseUrl.isEmpty()||apiKey.isEmpty()){toast("Connect backend first");return;}backtestButton.setText("RUNNING…");new Thread(()->{HttpURLConnection c=null;try{URL u=new URL(baseUrl+"/backtest?period=1y");c=(HttpURLConnection)u.openConnection();c.setRequestMethod("GET");c.setConnectTimeout(12000);c.setReadTimeout(60000);c.setRequestProperty("Accept","application/json");c.setRequestProperty("X-API-Key",apiKey);int code=c.getResponseCode();String body=read(code<400?c.getInputStream():c.getErrorStream());if(body==null||body.trim().isEmpty())throw new IOException("Empty backend response (HTTP "+code+")");String result=parseBacktestResponse(body,code);runOnUiThread(()->{out.setText(result);backtestButton.setText("RUN 1Y BACKTEST");});}catch(Exception e){runOnUiThread(()->{out.setText("Backtest unavailable: "+friendlyBacktestError(e));backtestButton.setText("RUN 1Y BACKTEST");});}finally{if(c!=null)c.disconnect();}}).start();}
+    
+    void showBacktestScreen(){
+        LinearLayout panel=new LinearLayout(this);panel.setOrientation(LinearLayout.VERTICAL);panel.setPadding(dp(2),dp(2),dp(2),dp(2));
+        ScrollView sv=new ScrollView(this);sv.addView(panel);sv.setBackgroundColor(BG);
+        LinearLayout hero=card();
+        TextView title=text("📊  BACKTEST & PERFORMANCE",22,TEXT);title.setTypeface(Typeface.DEFAULT,Typeface.BOLD);hero.addView(title,margin(0,5));
+        TextView sub=text("Measure the strategy on historical data without mixing it with the live market screen.",12,MUTED);hero.addView(sub,margin(0,10));
+        TextView mode=text("1 YEAR • OUT-OF-SAMPLE • COST-AWARE",10,BLUE);mode.setTypeface(Typeface.DEFAULT,Typeface.BOLD);mode.setPadding(dp(10),dp(7),dp(10),dp(7));mode.setBackground(rounded(Color.rgb(27,45,73),18));hero.addView(mode,margin(0,4));
+        panel.addView(hero,margin(0,10));
+
+        LinearLayout run=card();
+        TextView rh=text("RUN ANALYSIS",11,MUTED);rh.setTypeface(Typeface.DEFAULT,Typeface.BOLD);run.addView(rh,margin(0,4));
+        TextView rn=text("This backtest uses only historical factors that can be reconstructed reliably from available public data. Missing live-only factors are not invented.",12,TEXT);run.addView(rn,margin(0,6));
+        TextView note=text("Results are historical measurements, not guarantees of future performance.",10,MUTED);run.addView(note,margin(0,8));
+        TextView result=text("Ready to run",13,MUTED);result.setPadding(dp(12),dp(12),dp(12),dp(12));result.setBackground(rounded(Color.rgb(14,21,33),14));run.addView(result,margin(0,8));
+        Button runBtn=new Button(this);runBtn.setText("RUN 1Y BACKTEST");runBtn.setAllCaps(false);runBtn.setTextSize(14);runBtn.setTextColor(TEXT);runBtn.setBackground(box(Color.rgb(67,119,218),Color.rgb(40,76,155),16));run.addView(runBtn,new LinearLayout.LayoutParams(-1,dp(50)));
+        panel.addView(run,margin(0,10));
+
+        LinearLayout guide=card();TextView gh=text("WHAT YOU WILL SEE",11,MUTED);gh.setTypeface(Typeface.DEFAULT,Typeface.BOLD);guide.addView(gh,margin(0,6));
+        String[] gs={"📈 Win rate & average return","💰 Profit factor & cost-aware net result","📉 Maximum drawdown & losing streaks","🧪 Walk-forward out-of-sample results","🧠 Factor coverage & data quality","🔎 Historical factor limitations"};
+        for(String g:gs){TextView x=text(g,12,TEXT);guide.addView(x,margin(0,5));}
+        panel.addView(guide,margin(0,10));
+
+        TextView footer=text("Tip: run the backtest after the backend is connected. A successful result does not imply future profitability.",10,MUTED);footer.setPadding(dp(4),dp(5),dp(4),dp(15));panel.addView(footer);
+        AlertDialog d=new AlertDialog.Builder(this).setView(sv).setNegativeButton("CLOSE",null).create();
+        backtestButton=runBtn;
+        runBtn.setOnClickListener(v->{runBtn.setEnabled(false);runBtn.setText("RUNNING…");result.setText("Fetching historical data and calculating validation…");runBacktest(new TextViewProxy(result,runBtn));});
+        d.show();
+    }
+
+    static class TextViewProxy extends TextView{
+        TextView target; Button button;
+        TextViewProxy(TextView t,Button b){super(t.getContext());target=t;button=b;}
+        @Override public void setText(CharSequence cs){target.setText(cs);button.setEnabled(true);button.setText("RUN 1Y BACKTEST");}
+        @Override public void setText(int r){setText(getContext().getString(r));}
+    }
+
+void runBacktest(TextView out){String base=url.getText().toString().trim();if(base.endsWith("/"))base=base.substring(0,base.length()-1);final String baseUrl=base;final String apiKey=key.getText().toString().trim();if(baseUrl.isEmpty()||apiKey.isEmpty()){toast("Connect backend first");return;}backtestButton.setText("RUNNING…");new Thread(()->{HttpURLConnection c=null;try{URL u=new URL(baseUrl+"/backtest?period=1y");c=(HttpURLConnection)u.openConnection();c.setRequestMethod("GET");c.setConnectTimeout(12000);c.setReadTimeout(60000);c.setRequestProperty("Accept","application/json");c.setRequestProperty("X-API-Key",apiKey);int code=c.getResponseCode();String body=read(code<400?c.getInputStream():c.getErrorStream());if(body==null||body.trim().isEmpty())throw new IOException("Empty backend response (HTTP "+code+")");String result=parseBacktestResponse(body,code);runOnUiThread(()->{out.setText(result);backtestButton.setText("RUN 1Y BACKTEST");});}catch(Exception e){runOnUiThread(()->{out.setText("Backtest unavailable: "+friendlyBacktestError(e));backtestButton.setText("RUN 1Y BACKTEST");});}finally{if(c!=null)c.disconnect();}}).start();}
 
     String parseBacktestResponse(String body,int code)throws Exception{
         String s=body.trim();
