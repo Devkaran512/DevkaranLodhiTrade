@@ -36,7 +36,7 @@ public class MainActivity extends Activity {
     LinearLayout root, holidayList, evidenceList, warningList, newsList;
     Button menuButton;
     LinearLayout signalCard, connectionCard;
-    TextView action, market, updated, status, connectionDot, marketBadge, nextOpen, score, regime, reversal, horizons, optionSummary, breadthSummary, flowSummary, newsSummary, positionStatus, positionHealth;
+    TextView action, market, updated, status, connectionDot, marketBadge, nextOpen, score, regime, reversal, horizons, optionSummary, breadthSummary, flowSummary, newsSummary, factorSummary, psychologySummary, changeSummary, learningSummary, positionStatus, positionHealth;
     TextView entryValue, stopValue, targetValue;
     boolean connected=false;
     JSONObject lastIntel;
@@ -130,6 +130,7 @@ public class MainActivity extends Activity {
         LinearLayout panel=new LinearLayout(this);panel.setOrientation(LinearLayout.VERTICAL);panel.setPadding(dp(4),dp(2),dp(4),dp(2));ScrollView sv=new ScrollView(this);sv.addView(panel);
         TextView intro=text("BANKNIFTY INFORMATION CENTER",19,TEXT);intro.setTypeface(Typeface.DEFAULT,Typeface.BOLD);panel.addView(intro,margin(0,6));TextView desc=text("Future-reference information is kept here so the main trading screen stays focused.",11,MUTED);panel.addView(desc,margin(0,14));
         LinearLayout intel=card();TextView it=text("MARKET INTELLIGENCE",12,MUTED);it.setTypeface(Typeface.DEFAULT,Typeface.BOLD);intel.addView(it,margin(0,8));TextView ir=text("Regime: —",14,TEXT);TextView ib=text("Bank breadth: —",12,MUTED);TextView io=text("Options: —",12,MUTED);TextView iff=text("Institutional flows: —",12,MUTED);TextView inn=text("News/event context: —",12,MUTED);TextView irv=text("Reversal risks: —",12,MUTED);intel.addView(ir);intel.addView(ib,margin(0,6));intel.addView(io,margin(0,6));intel.addView(iff,margin(0,6));intel.addView(inn,margin(0,6));intel.addView(irv,margin(0,6));
+        TextView fh=text("MULTI-FACTOR SCOREBOARD",11,MUTED);fh.setTypeface(Typeface.DEFAULT,Typeface.BOLD);intel.addView(fh,margin(0,12));TextView fs=text("Factors: —",12,TEXT);intel.addView(fs);TextView ps=text("Psychology: —",12,MUTED);intel.addView(ps,margin(0,6));TextView cs=text("Signal change: —",12,MUTED);intel.addView(cs,margin(0,6));TextView ls=text("Learning memory: —",12,MUTED);intel.addView(ls,margin(0,6));
         TextView eh=text("Supporting evidence",11,MUTED);eh.setTypeface(Typeface.DEFAULT,Typeface.BOLD);intel.addView(eh,margin(0,10));LinearLayout ev=list();intel.addView(ev);TextView wh=text("Warnings / invalidation",11,MUTED);wh.setTypeface(Typeface.DEFAULT,Typeface.BOLD);intel.addView(wh,margin(0,10));LinearLayout wa=list();intel.addView(wa);TextView hz=text("Horizons: —",11,MUTED);intel.addView(hz,margin(0,10));
         TextView simh=text("Historical similarity",11,MUTED);simh.setTypeface(Typeface.DEFAULT,Typeface.BOLD);intel.addView(simh,margin(0,12));LinearLayout sim=list();intel.addView(sim);panel.addView(intel,margin(0,8));
         LinearLayout hc=card();TextView h=text("NSE HOLIDAY CALENDAR 2026",12,MUTED);h.setTypeface(Typeface.DEFAULT,Typeface.BOLD);hc.addView(h,margin(0,8));holidayList=list();hc.addView(holidayList);setDefaultHolidayCalendar();panel.addView(hc,margin(0,8));
@@ -137,7 +138,7 @@ public class MainActivity extends Activity {
         AlertDialog d=new AlertDialog.Builder(this).setView(sv).setPositiveButton("CLOSE",null).create();d.show();
         // Bind the dialog views to the cached intelligence fields.
         regime=ir; breadthSummary=ib; optionSummary=io; flowSummary=iff; newsSummary=inn;
-        reversal=irv; evidenceList=ev; warningList=wa; horizons=hz; newsList=sim;
+        reversal=irv; factorSummary=fs; psychologySummary=ps; changeSummary=cs; learningSummary=ls; evidenceList=ev; warningList=wa; horizons=hz; newsList=sim;
         if(lastIntel!=null) renderIntel(lastIntel);
     }
 
@@ -223,11 +224,21 @@ TextView valueText(){TextView v=text("—",16,TEXT);v.setTypeface(Typeface.DEFAU
         JSONObject nw=in.optJSONObject("news");
         if(newsSummary!=null)newsSummary.setText("News/event context: "+(nw!=null&&nw.optBoolean("available",false)&&nw.optJSONArray("items")!=null?nw.optJSONArray("items").length()+" recent public headlines classified":"unavailable"));
         if(reversal!=null)reversal.setText("Reversal risks: "+join(in.optJSONArray("reversal_risks")));
+        JSONArray factors=in.optJSONArray("factor_scores");
+        if(factorSummary!=null){StringBuilder fb=new StringBuilder();if(factors!=null){for(int i=0;i<factors.length();i++){JSONObject f=factors.optJSONObject(i);if(f==null)continue;if(fb.length()>0)fb.append("\n");fb.append(f.optString("name","Factor")).append(": ").append(f.optString("direction","NEUTRAL")).append(" ").append(String.format(Locale.US,"%+.1f",f.optDouble("score",0))).append(" • weight ").append(f.optInt("weight",0));}}JSONArray ti=in.optJSONArray("technical_indicators");if(ti!=null&&ti.length()>0){fb.append("\nTechnical indicators:");for(int i=0;i<ti.length();i++){JSONObject z=ti.optJSONObject(i);if(z==null)continue;fb.append("\n  ").append(z.optString("name","Indicator")).append(" ").append(String.format(Locale.US,"%+.0f",z.optDouble("score",0)));}}factorSummary.setText(fb.length()==0?"Factors: unavailable":"Factors:\n"+fb.toString());}
+        JSONObject py=in.optJSONObject("psychology");
+        if(psychologySummary!=null){if(py!=null&&py.optBoolean("available",false)){psychologySummary.setText("Psychology: "+py.optString("state","—")+" • Fear "+py.optDouble("fear",0)+" • Greed "+py.optDouble("greed",0)+" • Uncertainty "+py.optDouble("uncertainty",0)+"\n"+py.optString("interpretation",""));}else psychologySummary.setText("Psychology: unavailable");}
+        JSONObject ch=in.optJSONObject("signal_change");
+        if(changeSummary!=null){if(ch!=null&&ch.optBoolean("changed",false)){changeSummary.setText("Signal change: "+ch.optString("from","—")+" → "+ch.optString("to","—")+" • main drivers: "+joinDriverNames(ch.optJSONArray("drivers")));}else changeSummary.setText("Signal change: no material action change in previous cycle");}
+        JSONObject lm=in.optJSONObject("learning");
+        if(learningSummary!=null){if(lm!=null){JSONObject preview=lm.optJSONObject("current_preview");StringBuilder lb=new StringBuilder("Learning memory: ").append(lm.optInt("events_kept",0)).append(" events • ").append(lm.optInt("completed_observations",0)).append(" completed observations");if(preview!=null&&preview.optBoolean("available",false))lb.append("\nComparable completed setups: ").append(preview.optInt("sample_size",0)).append(" • avg 30m return ").append(String.format(Locale.US,"%+.4f%%",preview.optDouble("average_30m_return_pct",0)));else if(preview!=null)lb.append("\n").append(preview.optString("reason","Learning evidence not available yet"));lb.append("\nNo factor is permanently ignored; learning is advisory and bounded to available history.");learningSummary.setText(lb.toString());}else learningSummary.setText("Learning memory: unavailable");}
         if(evidenceList!=null){evidenceList.removeAllViews();forEach(in.optJSONArray("evidence"),evidenceList);}
         if(warningList!=null){warningList.removeAllViews();forEach(in.optJSONArray("warnings"),warningList);}
         if(horizons!=null)horizons.setText("Horizons: "+in.optJSONObject("time_horizons"));
         if(newsList!=null){newsList.removeAllViews();JSONArray sim=in.optJSONArray("historical_similarity");if(sim!=null)for(int i=0;i<Math.min(sim.length(),5);i++){JSONObject e=sim.optJSONObject(i);if(e!=null)addLine(newsList,e.optString("date")+" • "+e.optString("name")+" • similarity "+e.optInt("similarity"));}}
     }
+
+    String joinDriverNames(JSONArray a){if(a==null||a.length()==0)return "not yet identified";StringBuilder b=new StringBuilder();for(int i=0;i<a.length();i++){JSONObject d=a.optJSONObject(i);if(d==null)continue;if(b.length()>0)b.append(", ");b.append(d.optString("factor","factor"));}return b.toString();}
 
     void forEach(JSONArray a,LinearLayout l){if(a==null||a.length()==0){addLine(l,"None reported");return;}for(int i=0;i<a.length();i++)addLine(l,a.optString(i));}
     String join(JSONArray a){if(a==null||a.length()==0)return "none";StringBuilder b=new StringBuilder();for(int i=0;i<a.length();i++){if(i>0)b.append("; ");b.append(a.optString(i));}return b.toString();}

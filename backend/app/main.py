@@ -15,11 +15,29 @@ def make_signal(interval="5m"):
     s=final_signal(df)
     intel=build_intelligence(df,s)
     action=intel.get("action",s.action); score=intel.get("score",s.score)
+    entry=s.entry; stop_loss=s.stop_loss; target=s.target
+    # The multi-factor engine can produce a confirmed CALL/PUT even when the
+    # technical-only layer was neutral. Build transparent underlying levels.
+    if action in ("CALL","PUT") and entry is None:
+        r=df.iloc[-1]
+        entry=float(r.close)
+        try:
+            from .indicators import enrich
+            er=enrich(df).iloc[-1]
+            av=float(er.atr)
+            stop_loss=entry-1.25*av if action=="CALL" else entry+1.25*av
+            target=entry+2.0*(entry-stop_loss) if action=="CALL" else entry-2.0*(stop_loss-entry)
+        except Exception:
+            entry=None; stop_loss=None; target=None
     msg=s.message
+    if intel.get("signal_change",{}).get("changed"):
+        drivers=intel.get("signal_change",{}).get("drivers",[])
+        if drivers:
+            msg += " | Signal changed mainly because: " + ", ".join(d["factor"] for d in drivers[:3])
     if intel.get("warnings"): msg += " | " + "; ".join(intel["warnings"][:3])
     if state["market_closed"] or getattr(df,"attrs",{}).get("fallback_interval"):
         msg="Next-session setup based on latest available public candles. " + msg
-    return {"underlying":"BANKNIFTY","market_price":float(df.iloc[-1].close),"action":action,"score":score,"entry":s.entry,"stop_loss":s.stop_loss,"target":s.target,"message":msg,"timestamp":str(df.iloc[-1].timestamp),"market_closed":state["market_closed"],"session":state["session"],"data_interval":getattr(df,"attrs",{}).get("fallback_interval") or interval,"holiday":state["holiday"],"next_trading_date":state["next_trading_date"],"next_market_open":state["next_market_open"],"market_open":state["market_open"],"market_close":state["market_close"],"upcoming_holidays":state["upcoming_holidays"],"groww":False,"demo":False,"intelligence":intel}
+    return {"underlying":"BANKNIFTY","market_price":float(df.iloc[-1].close),"action":action,"score":score,"entry":entry,"stop_loss":stop_loss,"target":target,"message":msg,"timestamp":str(df.iloc[-1].timestamp),"market_closed":state["market_closed"],"session":state["session"],"data_interval":getattr(df,"attrs",{}).get("fallback_interval") or interval,"holiday":state["holiday"],"next_trading_date":state["next_trading_date"],"next_market_open":state["next_market_open"],"market_open":state["market_open"],"market_close":state["market_close"],"upcoming_holidays":state["upcoming_holidays"],"groww":False,"demo":False,"intelligence":intel}
 
 @app.get("/health")
 def health(x_api_key:str=Header(default="")):

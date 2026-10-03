@@ -35,3 +35,9 @@ Set the actual Render HTTPS URL and generated `BACKEND_API_KEY`, then tap **STAR
 - Alert Settings: master switch, ringtone picker, alert volume, test alarm, vibration patterns, event toggles, evidence threshold, market-hours/all-day/quiet-hours schedule.
 - Alert preferences are stored locally on the device.
 - Production/live engine only; no demo mode.
+
+## V19: Free-plan-safe event memory and outcome learning
+
+V19 adds a bounded Market Event Memory and Outcome Learning layer. It records meaningful signal changes, factor states, and later 5m/15m/30m/1h/1d/3d/5d market outcomes while the Render process remains alive. It reports factor-level historical hit rates and comparable prior setups.
+
+Important: Render Free web services can restart/spin down, so this memory is intentionally **not treated as durable storage**. No prediction depends on data surviving a restart. The learning layer is advisory and does not permanently ignore any factor or auto-change weights from a small sample.

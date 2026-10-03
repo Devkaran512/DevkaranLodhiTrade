@@ -50,3 +50,7 @@ Then tap `START LIVE SIGNAL`.
 ## Important
 
 Render free web services can spin down after inactivity, so the first request after idle can take longer. For production-grade continuous market-data latency, use a suitable always-on plan and preferably a licensed real-time data feed.
+
+## V19 learning-memory note
+
+V19 does not require a paid database. The learning/event journal is bounded in-process memory so it remains compatible with the Render Free plan. Render restarts/spin-downs can clear it. The API explicitly reports that storage policy to the app. Do not describe this as permanent cloud memory until a durable database is added and validated.

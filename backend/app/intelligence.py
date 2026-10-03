@@ -3,6 +3,10 @@ from .news import fetch_news
 from .historical import similar_events
 from .sources import basket_snapshot, global_snapshot, option_snapshot
 from .flows import flow_snapshot
+from .psychology import psychology_snapshot
+from .learning import preview as learning_preview, record_cycle
+
+_LAST = {"action": None, "score": None, "factors": {}}
 
 
 def _num(v, default=0.0):
@@ -10,74 +14,229 @@ def _num(v, default=0.0):
         x=float(v); return x if math.isfinite(x) else default
     except Exception: return default
 
+
+def _clamp(v, lo=-100.0, hi=100.0):
+    return max(lo, min(hi, float(v)))
+
+
+def _news_direction(items):
+    positive=("surge","rally","strong","growth","beat","easing","cut","recovery","inflow","bullish","support")
+    negative=("crash","fall","drop","weak","stress","war","inflation","hike","outflow","bearish","panic","selloff","shock","downgrade")
+    score=0; count=0
+    for n in items or []:
+        t=str(n.get("title","" )).lower()
+        p=sum(k in t for k in positive); q=sum(k in t for k in negative)
+        if p or q:
+            score += p-q; count += 1
+    return _clamp(score/max(1,count)*35)
+
+
+def _technical(x):
+    r=x.iloc[-1]; p=x.iloc[-2]
+    checks=[
+        ("EMA9", 100 if r.close>r.ema9 else -100, "price vs EMA9"),
+        ("EMA21", 100 if r.ema9>r.ema21 else -100, "EMA9 vs EMA21"),
+        ("EMA50", 100 if r.ema21>r.ema50 else -100, "EMA21 vs EMA50"),
+        ("EMA200", 100 if r.close>r.ema200 else -100, "price vs EMA200"),
+        ("VWAP", 100 if r.close>r.vwap else -100, "price vs VWAP"),
+        ("MACD", 100 if r.macd_hist>0 else -100, "MACD histogram"),
+        ("RSI", 100 if r.rsi>=55 else (-100 if r.rsi<=45 else 0), "RSI zone"),
+        ("ADX/momentum", 100 if r.adx>=20 and r.close>p.close else (-100 if r.adx>=20 and r.close<p.close else 0), "ADX >= 20 + price momentum"),
+        ("Volume", 100 if r.vol_ma20>0 and r.volume>r.vol_ma20 and r.close>p.close else (-100 if r.vol_ma20>0 and r.volume>r.vol_ma20 and r.close<p.close else 0), "volume expansion + direction"),
+        ("SMA20", 100 if r.close>r.sma20 else -100, "price vs SMA20"),
+    ]
+    score=sum(v for _,v,_ in checks)/len(checks)
+    why=[f"{name}: {'bullish' if value>0 else ('bearish' if value<0 else 'neutral')} ({desc})" for name,value,desc in checks]
+    return score, checks, why
+
+
+def _options_direction(opt):
+    if not opt.get("available") or not opt.get("call_oi"):
+        return 0.0, ["Options data unavailable"]
+    pcr=_num(opt.get("put_oi"))/max(_num(opt.get("call_oi")),1)
+    opt["pcr_oi"]=round(pcr,3)
+    s=0; why=[]
+    if pcr>1.4: s+=30; why.append(f"PCR {pcr:.2f} is elevated")
+    elif pcr<0.7: s-=30; why.append(f"PCR {pcr:.2f} is low")
+    else: why.append(f"PCR {pcr:.2f} is neutral")
+    pc=_num(opt.get("put_change_oi")); cc=_num(opt.get("call_change_oi"))
+    if pc>cc*1.15: s+=20; why.append("Put OI addition exceeds Call OI addition")
+    elif cc>pc*1.15: s-=20; why.append("Call OI addition exceeds Put OI addition")
+    if _num(opt.get("avg_put_iv"))>_num(opt.get("avg_call_iv"))*1.15: s-=5; why.append("Put IV premium is elevated")
+    elif _num(opt.get("avg_call_iv"))>_num(opt.get("avg_put_iv"))*1.15: s+=5; why.append("Call IV premium is elevated")
+    return _clamp(s), why
+
+
+def _flow_direction(flows):
+    # NSE page formats can change. We only derive a direction when numeric FII/DII
+    # values can be safely recognised; otherwise the factor stays neutral.
+    if not flows.get("available"): return 0.0, ["FII/DII data unavailable"]
+    rows=flows.get("rows") or []
+    text=" ".join(str(r) for r in rows).lower()
+    # Direction is deliberately conservative because table schemas change.
+    if "net purchase" in text or "net buy" in text: return 20.0,["NSE flow table indicates net buying language"]
+    if "net sale" in text or "net sell" in text: return -20.0,["NSE flow table indicates net selling language"]
+    return 0.0,["FII/DII table available; no safely parsed directional value"]
+
+
+def _global_direction(glob):
+    if not glob: return 0.0,["Global market data unavailable"]
+    risk=sum(1 for z in glob if z.get("symbol") in ("^GSPC","^IXIC","^DJI","^N225","^HSI") and _num(z.get("change_pct"))<0)
+    positive=sum(1 for z in glob if z.get("symbol") in ("^GSPC","^IXIC","^DJI","^N225","^HSI") and _num(z.get("change_pct"))>0)
+    s=(positive-risk)/max(1,positive+risk)*70
+    why=[f"Global breadth {positive} positive / {risk} negative"]
+    dxy=next((_num(z.get("change_pct")) for z in glob if z.get("symbol")=="DX-Y.NYB"),0)
+    oil=next((_num(z.get("change_pct")) for z in glob if z.get("symbol")=="CL=F"),0)
+    if oil>3: s-=10; why.append(f"Crude +{oil:.1f}% risk pressure")
+    if dxy>1: s-=8; why.append(f"Dollar index +{dxy:.1f}% risk pressure")
+    return _clamp(s),why
+
+
+def _historical_direction(sim, risk_off):
+    if not sim: return 0.0,["No historical similarity context"]
+    top=sim[0]
+    if top.get("similarity",0)<2: return 0.0,["No strong historical match"]
+    if risk_off: return -25.0,[f"Historical match: {top.get('name','event')} in risk-off regime"]
+    return 0.0,[f"Historical context: {top.get('name','event')} (non-directional) "]
+
+
+def _factor(name, score, weight, why):
+    return {"name":name,"score":round(float(score),1),"weight":weight,"contribution":round(float(score)*weight/100,1),"direction":"BULLISH" if score>8 else ("BEARISH" if score<-8 else "NEUTRAL"),"reasons":why}
+
+
 def build_intelligence(df, base_signal):
     from .indicators import enrich
-    x=enrich(df).dropna(subset=["ema9","ema21","ema50","ema200","rsi","atr","macd_hist","adx","vwap"])
-    if x.empty:
+    x=enrich(df).dropna(subset=["ema9","ema21","ema50","ema200","rsi","atr","macd_hist","adx","vwap","sma20"])
+    if len(x)<40:
         return {"available":False,"reason":"Insufficient indicator history"}
-    r=x.iloc[-1]; p=x.iloc[-2] if len(x)>1 else r
-    tags=[]; warnings=[]; evidence=[]
-    if r.close>r.ema9>r.ema21>r.ema50: tags += ["trend_up","ema_alignment"]; evidence.append("Price above EMA 9/21/50")
-    if r.close<r.ema9<r.ema21<r.ema50: tags += ["trend_down","ema_alignment"]; evidence.append("Price below EMA 9/21/50")
-    if r.close>r.vwap: tags.append("above_vwap")
-    else: tags.append("below_vwap")
-    if r.close>r.ema20: evidence.append("Price above EMA 20")
-    else: evidence.append("Price below EMA 20")
+    r=x.iloc[-1]; p=x.iloc[-2]
+
+    # Gather all observable factors first. None is allowed to silently become a fake signal.
+    basket=basket_snapshot(); up=sum(1 for z in basket if _num(z.get("change_pct"))>0); down=sum(1 for z in basket if _num(z.get("change_pct"))<0)
+    breadth={"up":up,"down":down,"total":len(basket)}
+    breadth_score=((up-down)/max(1,len(basket)))*100 if basket else 0.0
+    glob=global_snapshot(); gscore,gwhy=_global_direction(glob)
+    opt=option_snapshot(); oscore,owhy=_options_direction(opt)
+    flows=flow_snapshot(); fscore,fwhy=_flow_direction(flows)
+    news=fetch_news(18); nscore=_news_direction(news.get("items",[])); nwhy=[f"News sentiment proxy score {nscore:.1f}"] if news.get("items") else ["News unavailable"]
+    psych=psychology_snapshot(df,opt,breadth,glob,news)
+    pscore=_num(psych.get("direction_score")) if psych.get("available") else 0.0
+    pwhy=[psych.get("state","UNAVAILABLE"),psych.get("crowd_vs_price","unknown")]
+
+    tscore,tchecks,twhy=_technical(x)
+    # Breadth factor is independent from the global and technical factors.
+    bwhy=[f"Bank breadth {up} up / {down} down"] if basket else ["Bank constituent data unavailable"]
+    sim=similar_events({"tags":[],"risk_off":sum(1 for z in glob if z.get("symbol") in ("^GSPC","^IXIC","^DJI","^N225","^HSI") and _num(z.get("change_pct"))<0)>=3,"vix_spike":next((_num(z.get("change_pct"))>10 for z in glob if z.get("symbol")=="^VIX"),False),"oil_shock":next((_num(z.get("change_pct"))>3 for z in glob if z.get("symbol")=="CL=F"),False)})
+    risk_off=sum(1 for z in glob if z.get("symbol") in ("^GSPC","^IXIC","^DJI","^N225","^HSI") and _num(z.get("change_pct"))<0)>=3
+    hscore,hwhy=_historical_direction(sim,risk_off)
+
+    indicator_scores=[{"name":name,"score":value,"description":desc} for name,value,desc in tchecks]
+    factors=[
+        _factor("Technical",tscore,28,twhy),
+        _factor("Options",oscore,15,owhy),
+        _factor("Market Psychology",pscore,15,pwhy),
+        _factor("Banking Breadth",breadth_score,10,bwhy),
+        _factor("Global Markets",gscore,10,gwhy),
+        _factor("Institutional Flows",fscore,8,fwhy),
+        _factor("News & Events",nscore,7,nwhy),
+        _factor("Historical Similarity",hscore,4,hwhy),
+    ]
+    # Learned behavior is advisory and only gets a small weight after enough
+    # completed comparable events exist. It never replaces current evidence.
+    provisional_side = "CALL" if (tscore + oscore + pscore + breadth_score + gscore + fscore + nscore + hscore) >= 0 else "PUT"
+    learning = learning_preview(provisional_side, factors)
+    learned_score = _num(learning.get("direction_score")) if learning.get("available") else 0.0
+    factors.append(_factor("Learned Market Behavior", learned_score, 3, [
+        f"Comparable completed events: {learning.get('sample_size', 0)}",
+        (f"Average comparable 30m return: {learning.get('average_30m_return_pct'):.4f}%" if learning.get("available") else learning.get("reason", "Learning evidence unavailable")),
+    ]))
+
+    total_weight=sum(f["weight"] for f in factors if f["name"] not in ("Options",) or opt.get("available"))
+    if not opt.get("available"):
+        # Re-normalise weights across available factors rather than penalising with a fake zero.
+        available=[f for f in factors if not (f["name"]=="Options")]
+    else: available=factors
+    total_weight=sum(f["weight"] for f in available)
+    aggregate=sum(f["score"]*f["weight"] for f in available)/max(1,total_weight)
+
+    # Reversal risk is a separate brake. It never creates a signal by itself.
+    warnings=[]; reversal=[]
     if r.close<=r.support20: warnings.append("Price is at/below 20-bar support")
     if r.close>=r.resistance20: warnings.append("Price is at/near 20-bar resistance")
     if r.rsi>=70: warnings.append("RSI is overbought")
     if r.rsi<=30: warnings.append("RSI is oversold")
     if r.adx<18: warnings.append("Trend strength is weak")
-    if r.volume>0 and r.vol_ma20>0 and r.volume>1.8*r.vol_ma20: tags.append("volume_expansion"); evidence.append("Volume expansion")
-    if r.atr>0 and abs(r.close-p.close)>1.5*r.atr: tags.append("large_move"); warnings.append("Large move versus ATR")
+    if r.volume>0 and r.vol_ma20>0 and r.volume>1.8*r.vol_ma20: warnings.append("Volume expansion")
+    if abs(r.close-p.close)>1.5*r.atr: warnings.append("Large move versus ATR")
+    if risk_off: warnings.append("Several tracked global indices are down")
+    if next((_num(z.get("change_pct"))>3 for z in glob if z.get("symbol")=="CL=F"),False): warnings.append("Tracked crude move is elevated")
+    if next((_num(z.get("change_pct"))>10 for z in glob if z.get("symbol")=="^VIX"),False): warnings.append("Tracked VIX change is elevated")
+    if not basket: warnings.append("Bank constituent breadth unavailable")
+    elif down>=up*1.5: warnings.append(f"Banking breadth is negative ({down} down / {up} up)")
+    elif up>=down*1.5: warnings.append(f"Banking breadth is positive ({up} up / {down} down)")
+    if news.get("items") and len([n for n in news["items"] if n.get("category") in ("RBI/BANKING","MACRO","US RATES","CRUDE","GEOPOLITICS","FX")])>=5: warnings.append("Multiple macro/banking/geopolitical headlines are active")
 
-    basket=basket_snapshot(); up=sum(1 for z in basket if z["change_pct"]>0); down=sum(1 for z in basket if z["change_pct"]<0)
-    breadth={"up":up,"down":down,"total":len(basket)}
-    if basket and up>=down*1.5: tags.append("bank_breadth_up"); evidence.append(f"Bank breadth {up} up / {down} down")
-    elif basket and down>=up*1.5: tags.append("bank_breadth_down"); evidence.append(f"Bank breadth {down} down / {up} up")
-    else: warnings.append("Bank constituent breadth is mixed")
+    action="CALL" if aggregate>=18 else ("PUT" if aggregate<=-18 else "WAIT")
+    # Require cross-factor confirmation: at least 3 non-identical factors must support the side.
+    supporting=[f for f in available if (f["score"]>=12 if action=="CALL" else f["score"]<=-12 if action=="PUT" else abs(f["score"])<12)]
+    if action in ("CALL","PUT") and len(supporting)<3: action="WAIT"
+    score=50+abs(aggregate)/2
+    if action=="WAIT": score=min(score,69)
 
-    glob=global_snapshot(); gmap={z["symbol"]:z["change_pct"] for z in glob}
-    risk_off = sum(1 for s in ("^GSPC","^IXIC","^DJI","^N225","^HSI") if gmap.get(s,0)<0) >= 3
-    if risk_off: tags.append("risk_off"); warnings.append("Several tracked global indices are down")
-    if gmap.get("CL=F",0)>3: tags.append("oil_shock"); warnings.append("Tracked crude move is elevated")
-    if gmap.get("^VIX",0)>10: tags.append("vix_spike"); warnings.append("Tracked VIX change is elevated")
+    if action=="CALL":
+        if risk_off: reversal.append("Global risk-off can invalidate a bullish setup")
+        if down>up*1.5: reversal.append("Banking breadth is negative")
+        if r.close<r.vwap: reversal.append("Price is below VWAP")
+        if psych.get("state")=="PANIC_EXHAUSTION_WATCH": reversal.append("Extreme fear with price stabilisation: reversal watch")
+    elif action=="PUT":
+        if up>down*1.5: reversal.append("Banking breadth is positive")
+        if r.close>r.vwap: reversal.append("Price is above VWAP")
+        if psych.get("state")=="FOMO_EXHAUSTION_WATCH": reversal.append("Extreme greed with price stabilisation: reversal watch")
 
-    opt=option_snapshot()
-    if opt.get("available") and opt.get("call_oi"):
-        pcr=opt["put_oi"]/opt["call_oi"]
-        opt["pcr_oi"]=round(pcr,3)
-        if pcr<0.7: warnings.append("Low put/call OI ratio")
-        elif pcr>1.4: warnings.append("High put/call OI ratio")
+    # Compare against the previous completed cycle. This explains signal changes instead of hiding them.
+    global _LAST
+    previous=_LAST.copy()
+    current_factors={f["name"]:f["score"] for f in factors}
+    current_indicators={z["name"]:z["score"] for z in indicator_scores}
+    change_drivers=[]
+    if previous.get("action") and previous.get("action")!=action:
+        for name,cur in current_factors.items():
+            old=previous.get("factors",{}).get(name)
+            if old is not None:
+                delta=cur-old
+                if abs(delta)>=8:
+                    change_drivers.append({"factor":name,"previous":round(old,1),"current":round(cur,1),"delta":round(delta,1),"reason":"material change in factor score"})
+        change_drivers.sort(key=lambda z:abs(z["delta"]),reverse=True)
+    elif previous.get("action"):
+        for name,cur in current_factors.items():
+            old=previous.get("factors",{}).get(name)
+            if old is not None and abs(cur-old)>=12:
+                change_drivers.append({"factor":name,"previous":round(old,1),"current":round(cur,1),"delta":round(cur-old,1),"reason":"material factor movement"})
+        change_drivers.sort(key=lambda z:abs(z["delta"]),reverse=True)
+    # Drill down into individual technical indicators so a signal change can be
+    # attributed to EMA/VWAP/MACD/RSI/ADX/volume rather than only "Technical".
+    old_indicators=previous.get("indicators",{})
+    for name,cur in current_indicators.items():
+        old=old_indicators.get(name)
+        if old is not None and abs(cur-old)>=100:
+            change_drivers.append({"factor":name,"previous":round(old,1),"current":round(cur,1),"delta":round(cur-old,1),"reason":"technical indicator state changed"})
+    change_drivers.sort(key=lambda z:abs(z["delta"]),reverse=True)
+    _LAST={"action":action,"score":score,"factors":current_factors,"indicators":current_indicators}
+    learning_context=record_cycle(action, score, float(r.close), factors, indicator_scores, bool(previous.get("action") and previous.get("action")!=action), change_drivers)
+    learning_context["current_preview"]=learning
 
-    flows=flow_snapshot()
-    news=fetch_news(18)
-    news_risk=[n for n in news.get("items",[]) if n["category"] in ("RBI/BANKING","MACRO","US RATES","CRUDE","GEOPOLITICS","FX")]
-    if len(news_risk)>=5: warnings.append("Multiple macro/banking/geopolitical headlines are active")
+    evidence=[]
+    for f in sorted(available,key=lambda z:abs(z["contribution"]),reverse=True):
+        if f["direction"]!="NEUTRAL": evidence.append(f"{f['name']}: {f['direction']} ({f['score']:+.1f})")
+    evidence += [f"Signal requires multi-factor confirmation: {len(supporting)} supporting factors"]
 
-    sim=similar_events({"tags":tags,"risk_off":risk_off,"vix_spike":"vix_spike" in tags,"oil_shock":"oil_shock" in tags})
-    reversal=[]
-    if base_signal.action=="CALL":
-        if "risk_off" in tags: reversal.append("Global risk-off can invalidate a bullish setup")
-        if "bank_breadth_down" in tags: reversal.append("Banking breadth has turned negative")
-        if "below_vwap" in tags: reversal.append("Price is below VWAP")
-        if "vix_spike" in tags: reversal.append("Volatility expansion can trigger reversal")
-    elif base_signal.action=="PUT":
-        if "bank_breadth_up" in tags: reversal.append("Banking breadth has turned positive")
-        if "above_vwap" in tags: reversal.append("Price is above VWAP")
-        if "vix_spike" in tags: reversal.append("Volatility expansion can reverse an intraday move")
-
-    score=float(base_signal.score)
-    if warnings: score -= min(20, len(warnings)*2.5)
-    if evidence: score += min(8, len(evidence)*1.5)
-    score=max(0,min(100,score))
-    action=base_signal.action
-    if reversal and len(reversal)>=2 and score<72: action="WAIT"
     return {
-        "available":True,"action":action,"base_action":base_signal.action,"score":round(score,1),
-        "evidence":evidence,"warnings":warnings,"reversal_risks":reversal,
-        "breadth":breadth,"global":glob,"options":opt,"institutional_flows":flows,"news":news,"historical_similarity":sim,
+        "available":True,"action":action,"base_action":base_signal.action,"score":round(_clamp(score,0,100),1),
+        "aggregate_direction":round(aggregate,1),"factor_scores":factors,"technical_indicators":indicator_scores,
+        "supporting_factor_count":len(supporting),"evidence":evidence,"warnings":warnings,"reversal_risks":reversal,
+        "signal_change":{"changed":bool(previous.get("action") and previous.get("action")!=action),"from":previous.get("action"),"to":action,"drivers":change_drivers},
+        "breadth":breadth,"global":glob,"options":opt,"institutional_flows":flows,"news":news,"historical_similarity":sim,"psychology":psych,"learning":learning_context,
         "regime":"RISK-OFF" if risk_off else ("TREND" if r.adx>=20 else "RANGE"),
-        "expected_validity":"5-15 min to next major data/news shock" if base_signal.action in ("CALL","PUT") else "Reassess on next signal cycle",
+        "expected_validity":"5-15 min to next major data/news shock" if action in ("CALL","PUT") else "Reassess on next signal cycle",
         "time_horizons":{"intraday":"5-15m / 30m-few hours","next_day":"next trading session","swing":"2-5 days","medium":"1-4 weeks"}
     }
