@@ -359,18 +359,11 @@ TextView valueText(){TextView v=text("—",16,TEXT);v.setTypeface(Typeface.DEFAU
         TextView footer=text("Tip: run the backtest after the backend is connected. A successful result does not imply future profitability.",10,MUTED);footer.setPadding(dp(4),dp(5),dp(4),dp(15));panel.addView(footer);
         AlertDialog d=new AlertDialog.Builder(this).setView(sv).setNegativeButton("CLOSE",null).create();
         backtestButton=runBtn;
-        runBtn.setOnClickListener(v->{runBtn.setEnabled(false);runBtn.setText("RUNNING…");result.setText("Fetching historical data and calculating validation…");runBacktest(new TextViewProxy(result,runBtn));});
+        runBtn.setOnClickListener(v->{runBtn.setEnabled(false);runBtn.setText("RUNNING…");result.setText("Fetching historical data and calculating validation…");runBacktest(result);});
         d.show();
     }
 
-    static class TextViewProxy extends TextView{
-        TextView target; Button button;
-        TextViewProxy(TextView t,Button b){super(t.getContext());target=t;button=b;}
-        @Override public void setText(CharSequence cs){target.setText(cs);button.setEnabled(true);button.setText("RUN 1Y BACKTEST");}
-        @Override public void setText(int r){setText(getContext().getString(r));}
-    }
-
-void runBacktest(TextView out){String base=url.getText().toString().trim();if(base.endsWith("/"))base=base.substring(0,base.length()-1);final String baseUrl=base;final String apiKey=key.getText().toString().trim();if(baseUrl.isEmpty()||apiKey.isEmpty()){toast("Connect backend first");return;}backtestButton.setText("RUNNING…");new Thread(()->{HttpURLConnection c=null;try{URL u=new URL(baseUrl+"/backtest?period=1y");c=(HttpURLConnection)u.openConnection();c.setRequestMethod("GET");c.setConnectTimeout(12000);c.setReadTimeout(60000);c.setRequestProperty("Accept","application/json");c.setRequestProperty("X-API-Key",apiKey);int code=c.getResponseCode();String body=read(code<400?c.getInputStream():c.getErrorStream());if(body==null||body.trim().isEmpty())throw new IOException("Empty backend response (HTTP "+code+")");String result=parseBacktestResponse(body,code);runOnUiThread(()->{out.setText(result);backtestButton.setText("RUN 1Y BACKTEST");});}catch(Exception e){runOnUiThread(()->{out.setText("Backtest unavailable: "+friendlyBacktestError(e));backtestButton.setText("RUN 1Y BACKTEST");});}finally{if(c!=null)c.disconnect();}}).start();}
+void runBacktest(TextView out){String base=url.getText().toString().trim();if(base.endsWith("/"))base=base.substring(0,base.length()-1);final String baseUrl=base;final String apiKey=key.getText().toString().trim();if(baseUrl.isEmpty()||apiKey.isEmpty()){toast("Connect backend first");backtestButton.setEnabled(true);backtestButton.setText("RUN 1Y BACKTEST");return;}backtestButton.setText("RUNNING…");new Thread(()->{HttpURLConnection c=null;try{URL u=new URL(baseUrl+"/backtest?period=1y");c=(HttpURLConnection)u.openConnection();c.setRequestMethod("GET");c.setConnectTimeout(12000);c.setReadTimeout(60000);c.setRequestProperty("Accept","application/json");c.setRequestProperty("X-API-Key",apiKey);int code=c.getResponseCode();String body=read(code<400?c.getInputStream():c.getErrorStream());if(body==null||body.trim().isEmpty())throw new IOException("Empty backend response (HTTP "+code+")");String result=parseBacktestResponse(body,code);runOnUiThread(()->{out.setText(result);backtestButton.setText("RUN 1Y BACKTEST");});}catch(Exception e){runOnUiThread(()->{out.setText("Backtest unavailable: "+friendlyBacktestError(e));backtestButton.setText("RUN 1Y BACKTEST");});}finally{if(c!=null)c.disconnect();}}).start();}
 
     String parseBacktestResponse(String body,int code)throws Exception{
         String s=body.trim();
