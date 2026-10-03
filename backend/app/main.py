@@ -47,4 +47,9 @@ def analysis(x_api_key:str=Header(default=""), interval:str="5m"):
 @app.get("/backtest")
 def backtest(x_api_key:str=Header(default=""), period:str="1y"):
     auth(x_api_key)
-    return run_backtest(period=period)
+    try:
+        result=run_backtest(period=period)
+        return result
+    except Exception as e:
+        # Never turn a data-source failure into an opaque HTTP 500 for the mobile client.
+        return {"available":False,"period":period,"reason":"Backtest service error: "+str(e)[:220]}

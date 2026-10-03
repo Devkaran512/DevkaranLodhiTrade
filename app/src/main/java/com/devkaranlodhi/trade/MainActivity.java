@@ -34,6 +34,7 @@ public class MainActivity extends Activity {
             TEXT=Color.rgb(238,244,255), MUTED=Color.rgb(148,163,184), BORDER=Color.rgb(48,61,82);
     static final int GREEN=Color.rgb(41,205,126), RED=Color.rgb(255,82,102), WAIT=Color.rgb(246,183,72), BLUE=Color.rgb(76,151,255), PURPLE=Color.rgb(145,102,255);
     LinearLayout root, holidayList, evidenceList, warningList, newsList;
+    Button menuButton;
     LinearLayout signalCard, connectionCard;
     TextView action, market, updated, status, connectionDot, marketBadge, nextOpen, score, regime, reversal, horizons, optionSummary, breadthSummary, flowSummary, newsSummary, positionStatus, positionHealth;
     TextView entryValue, stopValue, targetValue;
@@ -64,14 +65,18 @@ public class MainActivity extends Activity {
         TextView title=text("DevkaranLodhiTrade",25,TEXT);title.setTypeface(Typeface.DEFAULT,Typeface.BOLD);root.addView(title);
         TextView sub=text("BANKNIFTY • PRODUCTION PREDICTION ENGINE",11,MUTED);sub.setPadding(0,dp(6),0,0);root.addView(sub);
 
-        LinearLayout topActions=new LinearLayout(this);topActions.setGravity(Gravity.CENTER_VERTICAL);topActions.setPadding(0,dp(12),0,dp(4));
-        TextView liveTag=text("● LIVE ENGINE",10,GREEN);liveTag.setTypeface(Typeface.DEFAULT,Typeface.BOLD);topActions.addView(liveTag,new LinearLayout.LayoutParams(0,dp(42),1));
-        infoButton=topButton("ⓘ  INFO",BLUE);infoButton.setOnClickListener(v->showInfo());topActions.addView(infoButton,new LinearLayout.LayoutParams(dp(76),dp(42)));
-        connectButton=topButton("↗  CONNECT",GREEN);connectButton.setOnClickListener(v->showConnectionSettings());topActions.addView(connectButton,new LinearLayout.LayoutParams(dp(96),dp(42)));
-        settingsButton=topButton("⚙  SETTINGS",PURPLE);settingsButton.setOnClickListener(v->showAlertSettings());topActions.addView(settingsButton,new LinearLayout.LayoutParams(dp(104),dp(42)));
+        LinearLayout liveRow=new LinearLayout(this);liveRow.setGravity(Gravity.RIGHT|Gravity.CENTER_VERTICAL);
+        TextView liveTag=text("● LIVE ENGINE",11,GREEN);liveTag.setTypeface(Typeface.DEFAULT,Typeface.BOLD);liveTag.setPadding(0,dp(2),dp(4),dp(6));liveRow.addView(liveTag);
+        root.addView(liveRow);
+
+        LinearLayout topActions=new LinearLayout(this);topActions.setGravity(Gravity.CENTER_VERTICAL);topActions.setPadding(0,dp(2),0,dp(6));
+        menuButton=topButton("☰  MENU",BLUE);menuButton.setOnClickListener(v->showMenu());topActions.addView(menuButton,new LinearLayout.LayoutParams(0,dp(44),1));
+        connectButton=topButton("↗  CONNECT",GREEN);connectButton.setOnClickListener(v->showConnectionSettings());LinearLayout.LayoutParams cp=new LinearLayout.LayoutParams(0,dp(44),1);cp.setMargins(dp(5),0,0,0);topActions.addView(connectButton,cp);
+        settingsButton=topButton("⚙  SETTINGS",PURPLE);settingsButton.setOnClickListener(v->showAlertSettings());LinearLayout.LayoutParams sp=new LinearLayout.LayoutParams(0,dp(44),1);sp.setMargins(dp(5),0,0,0);topActions.addView(settingsButton,sp);
+        infoButton=topButton("ⓘ  INFO",BLUE);infoButton.setOnClickListener(v->showInfo());LinearLayout.LayoutParams ip=new LinearLayout.LayoutParams(0,dp(44),1);ip.setMargins(dp(5),0,0,0);topActions.addView(infoButton,ip);
         root.addView(topActions);
 
-        LinearLayout sr=new LinearLayout(this);sr.setGravity(Gravity.CENTER_VERTICAL);connectionDot=text("●",11,RED);sr.addView(connectionDot);status=text("  Not connected",12,RED);sr.addView(status,new LinearLayout.LayoutParams(0,-2,1));TextView hint=text("Auto-reconnect ON",10,MUTED);sr.addView(hint);root.addView(sr,margin(0,12));
+        LinearLayout sr=new LinearLayout(this);sr.setGravity(Gravity.CENTER_VERTICAL);connectionDot=text("●",18,RED);connectionDot.setTypeface(Typeface.DEFAULT,Typeface.BOLD);sr.addView(connectionDot,new LinearLayout.LayoutParams(dp(24),dp(24)));status=text("Not connected",12,RED);sr.addView(status,new LinearLayout.LayoutParams(0,-2,1));TextView hint=text("Auto-reconnect ON",10,MUTED);sr.addView(hint);root.addView(sr,margin(0,12));
 
         LinearLayout ms=card();LinearLayout mh=new LinearLayout(this);mh.setGravity(Gravity.CENTER_VERTICAL);TextView mt=text("NSE MARKET STATUS",11,MUTED);mt.setTypeface(Typeface.DEFAULT,Typeface.BOLD);mh.addView(mt,new LinearLayout.LayoutParams(0,-2,1));marketBadge=text("CHECKING",10,BLUE);marketBadge.setGravity(Gravity.CENTER);marketBadge.setPadding(dp(11),dp(7),dp(11),dp(7));marketBadge.setBackground(rounded(Color.rgb(28,43,66),20));mh.addView(marketBadge);ms.addView(mh);nextOpen=text("Checking market calendar…",15,TEXT);nextOpen.setPadding(0,dp(12),0,0);ms.addView(nextOpen);TextView hrs=text("BANKNIFTY derivatives: 09:15 AM – 03:40 PM IST",11,MUTED);hrs.setPadding(0,dp(5),0,0);ms.addView(hrs);root.addView(ms,margin(0,12));
 
@@ -87,16 +92,34 @@ public class MainActivity extends Activity {
         LinearLayout bt=card();TextView bth=text("OUT-OF-SAMPLE BACKTEST",11,MUTED);bth.setTypeface(Typeface.DEFAULT,Typeface.BOLD);bt.addView(bth,margin(0,8));TextView btNote=text("Historical measurement of the production rules. It does not guarantee future results.",11,MUTED);bt.addView(btNote,margin(0,8));backtestButton=new Button(this);backtestButton.setText("RUN 1Y BACKTEST");bt.addView(backtestButton);TextView btResult=text("Backtest: not run",12,TEXT);btResult.setPadding(0,dp(8),0,0);bt.addView(btResult);backtestButton.setOnClickListener(v->runBacktest(btResult));root.addView(bt,margin(0,18));
 
         // Connection fields are kept off the main screen. They are edited only from CONNECT.
-        url=field("Backend URL","https://your-service.onrender.com",false);key=field("Backend API Key","Paste generated key",true);url.setVisibility(View.GONE);key.setVisibility(View.GONE);root.addView(url,new LinearLayout.LayoutParams(1,1));root.addView(key,new LinearLayout.LayoutParams(1,1));
+        url=field("Backend URL","https://devkaranlodhitrade-api.onrender.com",false);key=field("Backend API Key","Paste generated key",true);url.setVisibility(View.GONE);key.setVisibility(View.GONE);root.addView(url,new LinearLayout.LayoutParams(1,1));root.addView(key,new LinearLayout.LayoutParams(1,1));
         connectionCard=null;
-        url.setText(prefs.getString("url",""));key.setText(loadApiKey());holidayList=list();setDefaultHolidayCalendar();loadPosition();savePosition.setOnClickListener(v->savePosition());clearPosition.setOnClickListener(v->clearPosition());setDefaultHolidayCalendar();setContentView(scroll);
+        url.setText(prefs.getString("url","https://devkaranlodhitrade-api.onrender.com"));key.setText(loadApiKey());holidayList=list();setDefaultHolidayCalendar();loadPosition();savePosition.setOnClickListener(v->savePosition());clearPosition.setOnClickListener(v->clearPosition());setDefaultHolidayCalendar();setContentView(scroll);
     }
 
     Button topButton(String label,int accent){Button b=new Button(this);b.setText(label);b.setTextSize(10);b.setTextColor(TEXT);b.setAllCaps(false);b.setPadding(dp(3),0,dp(3),0);b.setMinHeight(dp(42));b.setBackground(gradientStrokeButton(accent));return b;}
 
+    void showMenu(){
+        String[] items={"↻  Refresh live signal","♥  Backend health","▣  Public data sources","ⓘ  About production engine"};
+        AlertDialog d=new AlertDialog.Builder(this).setTitle("☰  MENU").setItems(items,(dialog,which)->{
+            if(which==0){ startPolling(); toast("Refreshing live signal…"); }
+            else if(which==1){ checkBackendHealth(); }
+            else if(which==2){ showDataSources(); }
+            else { new AlertDialog.Builder(this).setTitle("DevkaranLodhiTrade").setMessage("Production BANKNIFTY prediction engine. Public market data, technical analysis, options context, institutional flows, news/events, historical similarity and position monitoring. No demo mode and no Groww order execution.").setPositiveButton("CLOSE",null).show(); }
+        }).setNegativeButton("CLOSE",null).create();d.show();
+    }
+
+    void checkBackendHealth(){
+        String base=url.getText().toString().trim();if(base.isEmpty()){toast("Backend URL is not configured");return;}if(base.endsWith("/"))base=base.substring(0,base.length()-1);final String b=base;final String k=key.getText().toString().trim();new Thread(()->{HttpURLConnection c=null;try{c=(HttpURLConnection)new URL(b+"/health").openConnection();c.setConnectTimeout(10000);c.setReadTimeout(15000);if(!k.isEmpty())c.setRequestProperty("X-API-Key",k);int code=c.getResponseCode();String body=read(code<400?c.getInputStream():c.getErrorStream());runOnUiThread(()->new AlertDialog.Builder(this).setTitle("Backend Health").setMessage("HTTP "+code+"\n\n"+body).setPositiveButton("OK",null).show());}catch(Exception e){runOnUiThread(()->toast("Health check failed: "+e.getMessage()));}finally{if(c!=null)c.disconnect();}}).start();
+    }
+
+    void showDataSources(){
+        new AlertDialog.Builder(this).setTitle("Public Data Sources").setMessage("Market candles: public Yahoo Finance adapter\nNSE: reference/public published information\nOptions: best-effort public options data\nNews/events: public headline sources\n\nMissing or unavailable public data is surfaced as WAIT/unavailable rather than invented data.").setPositiveButton("CLOSE",null).show();
+    }
+
     void showConnectionSettings(){
         LinearLayout panel=new LinearLayout(this);panel.setOrientation(LinearLayout.VERTICAL);panel.setPadding(dp(4),dp(2),dp(4),dp(2));
-        EditText u=field("Backend URL","https://your-service.onrender.com",false);EditText k=field("Backend API Key","Paste generated key",true);u.setText(prefs.getString("url",""));k.setText(loadApiKey());panel.addView(u,margin(0,10));panel.addView(k,margin(0,12));
+        EditText u=field("Backend URL","https://devkaranlodhitrade-api.onrender.com",false);EditText k=field("Backend API Key","Paste generated key",true);u.setText(prefs.getString("url","https://devkaranlodhitrade-api.onrender.com"));k.setText(loadApiKey());panel.addView(u,margin(0,10));panel.addView(k,margin(0,12));
         TextView n=text("API key is stored encrypted on this phone. It is not shown on the main screen.",11,MUTED);panel.addView(n,margin(0,12));
         LinearLayout actions=new LinearLayout(this);Button save=new Button(this);save.setText("SAVE & CONNECT");save.setAllCaps(false);save.setTextColor(Color.WHITE);save.setBackground(box(Color.rgb(69,124,220),Color.rgb(45,82,165),14));Button cancel=new Button(this);cancel.setText("CANCEL");cancel.setAllCaps(false);cancel.setBackground(gradientStrokeButton(BORDER));actions.addView(save,weight(1,6));actions.addView(cancel,weight(1,0));panel.addView(actions);
         AlertDialog d=new AlertDialog.Builder(this).setTitle("🔗 BACKEND CONNECTION").setView(panel).create();cancel.setOnClickListener(v->d.dismiss());save.setOnClickListener(v->{String base=u.getText().toString().trim();String api=k.getText().toString().trim();if(base.endsWith("/"))base=base.substring(0,base.length()-1);if(base.isEmpty()||api.isEmpty()){toast("Enter Backend URL and API Key");return;}url.setText(base);key.setText(api);prefs.edit().putString("url",base).apply();saveApiKey(api);toast("Connection saved • connecting…");d.dismiss();startPolling();});d.show();
