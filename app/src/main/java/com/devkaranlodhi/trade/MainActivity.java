@@ -39,6 +39,7 @@ public class MainActivity extends Activity {
     TextView action, market, updated, status, connectionDot, marketBadge, nextOpen, score, regime, reversal, horizons, optionSummary, breadthSummary, flowSummary, newsSummary, positionStatus, positionHealth;
     TextView entryValue, stopValue, targetValue;
     boolean connected=false;
+    JSONObject lastIntel;
     EditText url,key,posType,posStrike,posEntry,posQty,posSL,posTarget;
     Button start,savePosition,clearPosition,backtestButton,settingsButton,infoButton,connectButton;
     ScheduledExecutorService scheduler;
@@ -134,8 +135,10 @@ public class MainActivity extends Activity {
         LinearLayout hc=card();TextView h=text("NSE HOLIDAY CALENDAR 2026",12,MUTED);h.setTypeface(Typeface.DEFAULT,Typeface.BOLD);hc.addView(h,margin(0,8));holidayList=list();hc.addView(holidayList);setDefaultHolidayCalendar();panel.addView(hc,margin(0,8));
         TextView footer=text("Tip: use SETTINGS for alerts and CONNECT for backend URL/API key.",11,MUTED);panel.addView(footer,margin(0,8));
         AlertDialog d=new AlertDialog.Builder(this).setView(sv).setPositiveButton("CLOSE",null).create();d.show();
-        // Copy the latest intelligence into this dialog when available.
-        if(regime!=null){ir.setText(regime.getText());ib.setText(breadthSummary.getText());io.setText(optionSummary.getText());iff.setText(flowSummary.getText());inn.setText(newsSummary.getText());irv.setText(reversal.getText());hz.setText(horizons.getText());copyLines(evidenceList,ev);copyLines(warningList,wa);copyLines(newsList,sim);}
+        // Bind the dialog views to the cached intelligence fields.
+        regime=ir; breadthSummary=ib; optionSummary=io; flowSummary=iff; newsSummary=inn;
+        reversal=irv; evidenceList=ev; warningList=wa; horizons=hz; newsList=sim;
+        if(lastIntel!=null) renderIntel(lastIntel);
     }
 
     void copyLines(LinearLayout src,LinearLayout dst){if(src==null||dst==null)return;for(int i=0;i<src.getChildCount();i++){View v=src.getChildAt(i);if(v instanceof TextView){TextView t=(TextView)v;TextView n=text(t.getText().toString(),t.getTextSize()/getResources().getDisplayMetrics().scaledDensity,t.getCurrentTextColor());dst.addView(n,margin(0,5));}}}
@@ -207,7 +210,25 @@ TextView valueText(){TextView v=text("—",16,TEXT);v.setTypeface(Typeface.DEFAU
     void poll(String base,String apiKey){HttpURLConnection c=null;try{URL u=new URL(base+"/signal?interval=5m");c=(HttpURLConnection)u.openConnection();c.setConnectTimeout(10000);c.setReadTimeout(30000);c.setRequestProperty("X-API-Key",apiKey);int code=c.getResponseCode();InputStream is=code>=200&&code<400?c.getInputStream():c.getErrorStream();String body=read(is);if(code==401||code==403){showConnectionError("WRONG API KEY","The Backend API Key is incorrect. Please open CONNECT and enter the correct key.",false);return;}if(body==null||body.trim().isEmpty())throw new IOException("Empty backend response (HTTP "+code+")");JSONObject j=new JSONObject(body);render(j,code);}catch(Exception e){runOnUiThread(()->{action.setText("WAIT");action.setTextColor(WAIT);market.setText("Backend/data unavailable: "+e.getMessage());status.setText("  Backend unavailable • retrying automatically");connectionDot.setTextColor(BLUE);connected=false;});}finally{if(c!=null)c.disconnect();}}
 
     void render(JSONObject j,int code){try{String a=j.optString("action","WAIT");double sc=j.optDouble("score",0);String msg=j.optString("message","");String ts=j.optString("timestamp","");boolean closed=j.optBoolean("market_closed",false);String session=j.optString("session","");String holiday=j.optString("holiday","");String next=j.optString("next_market_open","");JSONObject in=j.optJSONObject("intelligence");runOnUiThread(()->{action.setText(a);action.setTextColor(colorFor(a));applySignalVisual(a);score.setText(String.format(Locale.US,"Evidence score: %.1f / 100",sc));market.setText((closed?"MARKET CLOSED • "+session+"\n":"")+(holiday.isEmpty()?msg:"Today: "+holiday+"\n"+msg));setLevelValue(entryValue,j.optDouble("entry",Double.NaN));setLevelValue(stopValue,j.optDouble("stop_loss",Double.NaN));setLevelValue(targetValue,j.optDouble("target",Double.NaN));updated.setText("Updated: "+ts);marketBadge.setText(closed?"MARKET CLOSED":"MARKET OPEN");marketBadge.setTextColor(closed?RED:GREEN);nextOpen.setText(closed?"Next market start: "+prettyDate(j.optString("next_trading_date"))+" • "+formatTime(next)+" IST":"Market hours: 09:15 AM – 03:40 PM IST");if(in!=null)renderIntel(in);signalTransitionAlert(a);JSONArray hs=j.optJSONArray("upcoming_holidays");if(hs!=null)updateHolidayList(hs);if(code>=200&&code<300){setConnectedVisual();status.setText("  Connected • production engine • auto-reconnect ON");connectionDot.setTextColor(GREEN);}else{status.setText("  Backend HTTP "+code+" • retrying");connectionDot.setTextColor(RED);setDisconnectedVisual();}checkPosition(a,sc,j);strongAlert(a,sc);});}catch(Exception ignored){}}
-    void renderIntel(JSONObject in){regime.setText("Regime: "+in.optString("regime","—")+" • Expected validity: "+in.optString("expected_validity","—"));JSONObject br=in.optJSONObject("breadth");if(br!=null)breadthSummary.setText("Bank breadth: "+br.optInt("up")+" up / "+br.optInt("down")+" down of "+br.optInt("total"));JSONObject op=in.optJSONObject("options");optionSummary.setText("Options: "+(op==null?"—":(op.optBoolean("available",false)?"OI data available • PCR "+op.optString("pcr_oi","—"):"unavailable")));JSONObject fl=in.optJSONObject("institutional_flows");flowSummary.setText("Institutional flows: "+(fl!=null&&fl.optBoolean("available",false)?"NSE FII/FPI + DII report available":"unavailable / exchange response not available"));JSONObject nw=in.optJSONObject("news");newsSummary.setText("News/event context: "+(nw!=null&&nw.optBoolean("available",false)?nw.optJSONArray("items").length()+" recent public headlines classified":"unavailable"));reversal.setText("Reversal risks: "+join(in.optJSONArray("reversal_risks")));evidenceList.removeAllViews();forEach(in.optJSONArray("evidence"),evidenceList);warningList.removeAllViews();forEach(in.optJSONArray("warnings"),warningList);horizons.setText("Horizons: "+in.optJSONObject("time_horizons"));newsList.removeAllViews();JSONArray sim=in.optJSONArray("historical_similarity");if(sim!=null)for(int i=0;i<Math.min(sim.length(),5);i++){JSONObject e=sim.optJSONObject(i);if(e!=null)addLine(newsList,e.optString("date")+" • "+e.optString("name")+" • similarity "+e.optInt("similarity"));}}
+    void renderIntel(JSONObject in){
+        if(in==null)return;
+        lastIntel=in;
+        if(regime!=null)regime.setText("Regime: "+in.optString("regime","—")+" • Expected validity: "+in.optString("expected_validity","—"));
+        JSONObject br=in.optJSONObject("breadth");
+        if(br!=null&&breadthSummary!=null)breadthSummary.setText("Bank breadth: "+br.optInt("up")+" up / "+br.optInt("down")+" down of "+br.optInt("total"));
+        JSONObject op=in.optJSONObject("options");
+        if(optionSummary!=null)optionSummary.setText("Options: "+(op==null?"—":(op.optBoolean("available",false)?"OI data available • PCR "+op.optString("pcr_oi","—"):"unavailable")));
+        JSONObject fl=in.optJSONObject("institutional_flows");
+        if(flowSummary!=null)flowSummary.setText("Institutional flows: "+(fl!=null&&fl.optBoolean("available",false)?"NSE FII/FPI + DII report available":"unavailable / exchange response not available"));
+        JSONObject nw=in.optJSONObject("news");
+        if(newsSummary!=null)newsSummary.setText("News/event context: "+(nw!=null&&nw.optBoolean("available",false)&&nw.optJSONArray("items")!=null?nw.optJSONArray("items").length()+" recent public headlines classified":"unavailable"));
+        if(reversal!=null)reversal.setText("Reversal risks: "+join(in.optJSONArray("reversal_risks")));
+        if(evidenceList!=null){evidenceList.removeAllViews();forEach(in.optJSONArray("evidence"),evidenceList);}
+        if(warningList!=null){warningList.removeAllViews();forEach(in.optJSONArray("warnings"),warningList);}
+        if(horizons!=null)horizons.setText("Horizons: "+in.optJSONObject("time_horizons"));
+        if(newsList!=null){newsList.removeAllViews();JSONArray sim=in.optJSONArray("historical_similarity");if(sim!=null)for(int i=0;i<Math.min(sim.length(),5);i++){JSONObject e=sim.optJSONObject(i);if(e!=null)addLine(newsList,e.optString("date")+" • "+e.optString("name")+" • similarity "+e.optInt("similarity"));}}
+    }
+
     void forEach(JSONArray a,LinearLayout l){if(a==null||a.length()==0){addLine(l,"None reported");return;}for(int i=0;i<a.length();i++)addLine(l,a.optString(i));}
     String join(JSONArray a){if(a==null||a.length()==0)return "none";StringBuilder b=new StringBuilder();for(int i=0;i<a.length();i++){if(i>0)b.append("; ");b.append(a.optString(i));}return b.toString();}
 
