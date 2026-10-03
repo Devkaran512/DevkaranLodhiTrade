@@ -219,7 +219,21 @@ def option_snapshot():
                 pain=float((((k-calls.strike).clip(lower=0))*calls.openInterest.fillna(0)).sum()+(((puts.strike-k).clip(lower=0))*puts.openInterest.fillna(0)).sum())
                 best.append((pain,k))
             max_pain=min(best)[1]
-        return {"available":True,"expiry":exp,
+        try:
+            spot=float(t.fast_info.get("last_price"))
+        except Exception:
+            spot=float(strikes[len(strikes)//2]) if strikes else 0.0
+        atm=min(strikes,key=lambda k:abs(k-spot)) if strikes else None
+        near=[]
+        if atm is not None:
+            near_strikes=[k for k in strikes if abs(k-atm)<=1000][:12]
+            for k in near_strikes:
+                cr=calls[calls.strike==k]; pr=puts[puts.strike==k]
+                near.append({"strike":float(k),"call_oi":float(cr.openInterest.fillna(0).sum()),"put_oi":float(pr.openInterest.fillna(0).sum()),"call_volume":float(cr.volume.fillna(0).sum()),"put_volume":float(pr.volume.fillna(0).sum())})
+        try:
+            expiry_days=max(0,(datetime.fromisoformat(str(exp)).date()-datetime.now(IST).date()).days)
+        except Exception: expiry_days=None
+        return {"available":True,"expiry":exp,"expiry_days":expiry_days,"expiry_regime":"EXPIRY_DAY" if expiry_days==0 else ("NEAR_EXPIRY" if expiry_days<=2 else "NORMAL_EXPIRY"),"spot":spot,"atm_strike":atm,"near_atm":near,
                 "call_oi":call_oi,"put_oi":put_oi,"call_volume":float(calls.volume.fillna(0).sum()),"put_volume":float(puts.volume.fillna(0).sum()),
                 "call_change_oi":call_chg,"put_change_oi":put_chg,"avg_call_iv":call_iv,"avg_put_iv":put_iv,"max_pain":max_pain}
     except Exception as e:

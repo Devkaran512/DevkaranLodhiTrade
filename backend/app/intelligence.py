@@ -5,6 +5,8 @@ from .sources import basket_snapshot, global_snapshot, option_snapshot
 from .flows import flow_snapshot
 from .psychology import psychology_snapshot
 from .learning import preview as learning_preview, record_cycle
+from .regimes import gap_snapshot, structure_snapshot, volatility_snapshot, time_regime, event_risk
+from .sources import candles
 
 _LAST = {"action": None, "score": None, "factors": {}}
 
@@ -64,6 +66,11 @@ def _options_direction(opt):
     elif cc>pc*1.15: s-=20; why.append("Call OI addition exceeds Put OI addition")
     if _num(opt.get("avg_put_iv"))>_num(opt.get("avg_call_iv"))*1.15: s-=5; why.append("Put IV premium is elevated")
     elif _num(opt.get("avg_call_iv"))>_num(opt.get("avg_put_iv"))*1.15: s+=5; why.append("Call IV premium is elevated")
+    if _num(opt.get("put_volume"))>_num(opt.get("call_volume"))*1.2: s+=8; why.append("Put volume exceeds Call volume")
+    elif _num(opt.get("call_volume"))>_num(opt.get("put_volume"))*1.2: s-=8; why.append("Call volume exceeds Put volume")
+    er=opt.get("expiry_regime")
+    if er=="EXPIRY_DAY": why.append("Expiry-day regime: reversal/gamma sensitivity elevated")
+    elif er=="NEAR_EXPIRY": why.append("Near-expiry regime")
     return _clamp(s), why
 
 
@@ -110,15 +117,25 @@ def build_intelligence(df, base_signal):
     if len(x)<40:
         return {"available":False,"reason":"Insufficient indicator history"}
     r=x.iloc[-1]; p=x.iloc[-2]
+    gap=gap_snapshot(x); structure=structure_snapshot(x); timereg=time_regime()
 
     # Gather all observable factors first. None is allowed to silently become a fake signal.
     basket=basket_snapshot(); up=sum(1 for z in basket if _num(z.get("change_pct"))>0); down=sum(1 for z in basket if _num(z.get("change_pct"))<0)
     breadth={"up":up,"down":down,"total":len(basket)}
     breadth_score=((up-down)/max(1,len(basket)))*100 if basket else 0.0
-    glob=global_snapshot(); gscore,gwhy=_global_direction(glob)
+    glob=global_snapshot();
+    try:
+        nifty_df=candles("^NSEI",period="2d",interval="15m")
+        b0=float(r.close); b1=float(r.close); n0=float(nifty_df.iloc[-2].close); n1=float(nifty_df.iloc[-1].close)
+        rel_pct=(b1/float(p.close)-1)*100-(n1/n0-1)*100 if n0>0 and float(p.close)>0 else 0.0
+        rel={"available":True,"relative_pct":round(rel_pct,3),"direction":"OUTPERFORMING" if rel_pct>0.1 else ("UNDERPERFORMING" if rel_pct<-0.1 else "INLINE")}
+    except Exception:
+        rel={"available":False,"reason":"NIFTY relative-strength data unavailable"}
+    vix_change=next((_num(z.get("change_pct")) for z in glob if z.get("symbol")=="^VIX"),0.0); volreg=volatility_snapshot(x,vix_change); gscore,gwhy=_global_direction(glob)
     opt=option_snapshot(); oscore,owhy=_options_direction(opt)
     flows=flow_snapshot(); fscore,fwhy=_flow_direction(flows)
     news=fetch_news(18); nscore=_news_direction(news.get("items",[])); nwhy=[f"News sentiment proxy score {nscore:.1f}"] if news.get("items") else ["News unavailable"]
+    evrisk=event_risk(news)
     psych=psychology_snapshot(df,opt,breadth,glob,news)
     pscore=_num(psych.get("direction_score")) if psych.get("available") else 0.0
     pwhy=[psych.get("state","UNAVAILABLE"),psych.get("crowd_vs_price","unknown")]
@@ -131,15 +148,24 @@ def build_intelligence(df, base_signal):
     hscore,hwhy=_historical_direction(sim,risk_off)
 
     indicator_scores=[{"name":name,"score":value,"description":desc} for name,value,desc in tchecks]
+    struct_score=_num(structure.get("score")) if structure.get("available") else 0.0
+    vol_score=0.0 if not volreg.get("available") else (15 if volreg.get("state")=="NORMAL" else (-10 if volreg.get("state")=="EXTREME" else 5 if volreg.get("state")=="HIGH" else 0))
+    gap_score=30 if gap.get("available") and gap.get("type")=="GAP_UP" and r.close>p.close else (-30 if gap.get("available") and gap.get("type")=="GAP_DOWN" and r.close<p.close else 0)
+    event_score=0.0 if evrisk.get("level")=="NORMAL" else (-8.0 if evrisk.get("level")=="HIGH" else -3.0)
     factors=[
-        _factor("Technical",tscore,28,twhy),
-        _factor("Options",oscore,15,owhy),
-        _factor("Market Psychology",pscore,15,pwhy),
-        _factor("Banking Breadth",breadth_score,10,bwhy),
-        _factor("Global Markets",gscore,10,gwhy),
-        _factor("Institutional Flows",fscore,8,fwhy),
-        _factor("News & Events",nscore,7,nwhy),
-        _factor("Historical Similarity",hscore,4,hwhy),
+        _factor("Technical",tscore,18,twhy),
+        _factor("Options",oscore,14,owhy),
+        _factor("Market Psychology",pscore,14,pwhy),
+        _factor("Market Structure",struct_score,10,[structure.get("description","Structure unavailable"),f"Breakout {structure.get('breakout','NONE')} • retest {structure.get('retest','NONE')}"]),
+        _factor("Banking Breadth",breadth_score,7,bwhy),
+        _factor("Relative Strength",(35 if rel.get("direction")=="OUTPERFORMING" else (-35 if rel.get("direction")=="UNDERPERFORMING" else 0)),4,[f"BANKNIFTY vs NIFTY: {rel.get("direction","UNAVAILABLE")}"]),
+        _factor("Global Markets",gscore,7,gwhy),
+        _factor("Institutional Flows",fscore,7,fwhy),
+        _factor("News & Events",nscore,5,nwhy),
+        _factor("Volatility Regime",vol_score,4,[f"Volatility state {volreg.get('state','UNAVAILABLE')}",f"VIX change {vix_change:+.2f}%"]),
+        _factor("Gap & Time Regime",gap_score,3,[f"Open {gap.get('type','UNAVAILABLE')} {gap.get('gap_pct',0):+.2f}%",f"Time regime {timereg.get('label','UNKNOWN')}"]),
+        _factor("Event Risk",event_score,2,[f"Event risk {evrisk.get('level','NORMAL')}"]),
+        _factor("Historical Similarity",hscore,2,hwhy),
     ]
     # Learned behavior is advisory and only gets a small weight after enough
     # completed comparable events exist. It never replaces current evidence.
@@ -236,6 +262,7 @@ def build_intelligence(df, base_signal):
         "supporting_factor_count":len(supporting),"evidence":evidence,"warnings":warnings,"reversal_risks":reversal,
         "signal_change":{"changed":bool(previous.get("action") and previous.get("action")!=action),"from":previous.get("action"),"to":action,"drivers":change_drivers},
         "breadth":breadth,"global":glob,"options":opt,"institutional_flows":flows,"news":news,"historical_similarity":sim,"psychology":psych,"learning":learning_context,
+        "market_structure":structure,"gap":gap,"volatility_regime":volreg,"time_regime":timereg,"event_risk":evrisk,"relative_strength":rel,
         "regime":"RISK-OFF" if risk_off else ("TREND" if r.adx>=20 else "RANGE"),
         "expected_validity":"5-15 min to next major data/news shock" if action in ("CALL","PUT") else "Reassess on next signal cycle",
         "time_horizons":{"intraday":"5-15m / 30m-few hours","next_day":"next trading session","swing":"2-5 days","medium":"1-4 weeks"}
